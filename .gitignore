@@ -3,3 +3,4 @@
 /result
 /*.svg
 /.superpowers/
+__pycache__/
