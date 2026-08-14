@@ -42,9 +42,16 @@ border only — the usual fill flash would wash the stars out.
 `--bg closeopen` is the exception to the ~8%: it needs a window everywhere, so it
 draws a starfield in **every** eligible hexagon and lets the blinds do the
 rationing. That is ~76 starfields instead of ~7, which costs file size — a 4k
-frame goes from ~48 KB to ~216 KB (~35 KB gzipped). Their borders also stay at
+frame goes from ~48 KB to ~222 KB (~35 KB gzipped). Their borders also stay at
 the normal lattice opacity rather than the brighter window value, since marking
 every cell would just raise the whole field.
+
+Because SVG does no occlusion culling, a window would otherwise be repainted every
+frame underneath the shut, fully opaque blind hiding it. Each window therefore
+switches itself off (`display:none`) for exactly the span its own blind covers it,
+which measured **+22% frame rate, 5–10× fewer dropped frames and ~110 MiB less
+renderer memory** at 1080p. Both keyframe spans are derived from one constant, so
+a window cannot fall out of step with its blind.
 
 `--bg closeopen` is the animation built for this axis, and it needs something to
 reveal, so it is rejected with `--bg-image none` rather than rendering nothing:
@@ -110,6 +117,6 @@ python3 background.py --selftest
 Parses all 32 `bg` × `fg` × `icon` × `bg-image` combinations as XML and asserts
 the invariants: holder/intersector roles, the clear center, space-cell clearance
 and their opt-out of the fill flash, one blind per window layered *under* the
-triangles, blinds resting open so `prefers-reduced-motion` still shows the
-starfield, and that both `--icon ship --fg rotate` and `--bg closeopen
---bg-image none` are rejected.
+triangles, every window sharing its own blind's phase, blinds and windows resting
+open so `prefers-reduced-motion` still shows the starfield, and that both
+`--icon ship --fg rotate` and `--bg closeopen --bg-image none` are rejected.

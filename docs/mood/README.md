@@ -122,9 +122,39 @@ anywhere instead of always in the same seven places. Two consequences follow:
   raised across the board, which rule 1 forbids outright.
 
 The cost is file size: ~76 starfields instead of ~7 takes a 4k frame from ~48 KB
-to ~216 KB (~35 KB gzipped). Acceptable for a wallpaper. If it ever stops being
+to ~222 KB (~35 KB gzipped). Acceptable for a wallpaper. If it ever stops being
 acceptable, share a handful of starfields through `<defs>` and `<use>` before
-touching the star count — the density of stars is doing real work.
+touching the star count — the density of stars is doing real work, and halving it
+was measured to buy nothing (see below).
+
+### Windows switch themselves off while covered
+
+SVG performs no occlusion culling: a shut, fully opaque blind does **not** stop
+the starfield beneath it from being repainted every frame. So each window also
+carries `class="win"`, whose `winvis` keyframes set `display:none` for exactly
+the span its blind covers it. Measured on this lattice at 1080p, back to back in
+software rasterisation:
+
+| | frame rate | dropped frames | renderer RSS |
+|---|---|---|---|
+| always painted | 46–49 fps | 99–127 | 1142 MiB |
+| off while covered | **57–59 fps** | **13–25** | **1031 MiB** |
+
+Roughly +22% frame rate, 5–10× fewer dropped frames, ~110 MiB less resident
+memory, for +6 KB of output. The cost is confined to the paint area, not the star
+count — a control with half the stars ran no faster than the baseline, which is
+why cutting star density is the wrong lever.
+
+Two caveats worth keeping: this was measured under software rasterisation with no
+GPU available, and on a real GPU every variant likely sits at 60 fps and the win
+shrinks toward nothing; and absolute frame rates moved a lot with machine load,
+so only same-batch comparisons mean anything.
+
+**`BLIND_KF` is the single source of both keyframe sets.** The window's on/off
+span is derived from the blind's, one percent wider on each side, so the stars are
+already present before the blind starts to move. Hand-writing the two spans
+separately is how you get a starfield popping in over a shut blind; if you retime
+the blind, retime it there and both follow.
 
 Three more things this depends on, all easy to break:
 
@@ -134,9 +164,10 @@ Three more things this depends on, all easy to break:
   as a faint patch instead of disappearing.
 - The blind sits **above its window, below the triangles**. A triangle crossing a
   window must stay put while the blind moves under it.
-- The `.blind` rule rests at `scale(0)` — **open** — and the keyframes override it
-  while running. Rest it closed and `prefers-reduced-motion` hides the starfield
-  completely: motion off should cost the motion, never the picture.
+- `.blind` rests at `scale(0)` and `.win` at `display:inline` — both **open** — and
+  the keyframes override them while running. Rest either one closed and
+  `prefers-reduced-motion` hides the starfield completely: motion off should cost
+  the motion, never the picture.
 
 
 ## Extending

@@ -116,6 +116,10 @@ SPACE_STROKE_O = 0.34   # a space cell's border sits a touch brighter than the f
 # fully open for ~4%, which leaves a handful open at a time out of ~77. The period
 # is long because lowering the ratio alone would turn each opening into a blink.
 BLIND_S = (60, 90)      # per-cell shutter period, so cells never sync
+# Shutter keyframes as percentages of one cycle: the blind leaves scale(1) at [0],
+# is fully open over [1]..[2], and is shut again from [3]. The window behind it
+# derives its own on/off keyframes from these, so the two cannot drift apart.
+BLIND_KF = (44, 49, 53, 58)
 
 
 # ---- the shared grid ------------------------------------------------------
@@ -164,18 +168,23 @@ def space_cells(lat, seed, every=False):
     return out
 
 
-def space_cell(seed, poly, cx, cy, s, r, c):
+def space_cell(seed, poly, cx, cy, s, r, c, phase=None):
     """One hexagon of procedural deep space: clipped void ground, a faint nebula,
-    then seeded stars. Drawn, never embedded -- no assets, crisp at any size."""
+    then seeded stars. Drawn, never embedded -- no assets, crisp at any size.
+
+    phase (--bg closeopen) is its blind's timing, which makes the cell switch
+    itself off while that blind covers it. SVG does no occlusion culling, so
+    without this the stars are repainted every frame under a shut blind."""
     g = cell_rng("star", seed, r, c)
     cid = f"sp{r}_{c}"                      # cell coords, so ids are stable
+    win = f' class="win" style="{phase}"' if phase else ""
     star = PAL["bg"][0]
     nx, ny = cx + (g.random() - .5) * s, cy + (g.random() - .5) * s
     nrx, nry = s * (.55 + g.random() * .5), s * (.30 + g.random() * .3)
     neb = "neba" if g.random() < .6 else "nebb"
     ang = g.random() * 180
     p = [f'<clipPath id="{cid}"><polygon points="{poly}"/></clipPath>',
-         f'<g clip-path="url(#{cid})">',
+         f'<g{win} clip-path="url(#{cid})">',
          f'<polygon points="{poly}" fill="{VOID}"/>',
          f'<ellipse cx="{fmt(nx)}" cy="{fmt(ny)}" rx="{fmt(nrx)}" ry="{fmt(nry)}" '
          f'fill="url(#{neb})" transform="rotate({fmt(ang)} {fmt(nx)} {fmt(ny)})"/>']
@@ -195,16 +204,14 @@ def space_cell(seed, poly, cx, cy, s, r, c):
 
 
 # ---- background pattern ---------------------------------------------------
-def blind(seed, poly, r, c):
-    """--bg closeopen: a canvas-coloured hexagon over a space cell. Closed it is
-    indistinguishable from any other lattice cell; it shrinks about its own centre
-    so the starfield appears as a widening ring from the border inward, then grows
-    back. Fill is the page gradient in user space, so a closed cell matches canvas
-    exactly. Period and phase come from the cell's own stream, never draw order."""
+def blind_phase(seed, r, c):
+    """--bg closeopen: the timing of one cell's shutter, drawn from the cell's own
+    stream rather than draw order. The blind and the window it covers are given
+    this same string, so the window can switch itself off exactly while it is
+    hidden -- one value, two users, no way for them to fall out of step."""
     g = cell_rng("blind", seed, r, c)
     d = BLIND_S[0] + g.random() * (BLIND_S[1] - BLIND_S[0])
-    return (f'<polygon class="blind" style="animation-delay:-{fmt(g.random()*d)}s;'
-            f'animation-duration:{fmt(d)}s" points="{poly}" fill="url(#bg)"/>')
+    return f"animation-delay:-{fmt(g.random()*d)}s;animation-duration:{fmt(d)}s"
 
 
 def pat_trihex(w, h, lat, bg, bg_image="none", seed=0):
@@ -253,9 +260,13 @@ def pat_trihex(w, h, lat, bg, bg_image="none", seed=0):
         poly = pts(regular_poly(cx, cy, s, 6, math.pi / 6))
         void = (r, c) in space
         if void:
-            voids.append(space_cell(seed, poly, cx, cy, s, r, c))
-            if bg == "closeopen":
-                voids.append(blind(seed, poly, r, c))
+            phase = blind_phase(seed, r, c) if bg == "closeopen" else None
+            voids.append(space_cell(seed, poly, cx, cy, s, r, c, phase))
+            if phase:
+                # canvas-coloured, so a shut blind is indistinguishable from any
+                # other lattice cell -- see the userSpaceOnUse note on #bg
+                voids.append(f'<polygon class="blind" style="{phase}" '
+                             f'points="{poly}" fill="url(#bg)"/>')
         # A window's border sits brighter than the field to mark the few portals --
         # but under closeopen *every* cell is a portal, so that would just raise the
         # whole lattice (rule 1). There the blind opening is the only marker.
@@ -336,6 +347,7 @@ def ico_ship():
 
 # ---- assembly -------------------------------------------------------------
 def css():
+    k0, k1, k2, k3 = BLIND_KF
     return ("<style>"
             "@keyframes spin{to{transform:rotate(360deg)}}"
             "@keyframes rspin{to{transform:rotate(-360deg)}}"
@@ -348,18 +360,25 @@ def css():
             "24%{stroke-opacity:.34}100%{stroke-opacity:.34}}"
             # closing is opening played backwards, so one symmetric cycle covers both.
             # Mostly shut: 86% closed, ~5% shrinking, 4% open, ~5% growing back.
-            "@keyframes blind{0%,44%{transform:scale(1)}49%,53%{transform:scale(0)}"
-            "58%,100%{transform:scale(1)}}"
+            f"@keyframes blind{{0%,{k0}%{{transform:scale(1)}}"
+            f"{k1}%,{k2}%{{transform:scale(0)}}{k3}%,100%{{transform:scale(1)}}}}"
+            # ...and the window switches off whenever its blind covers it, with a
+            # 1% margin either side so the stars are already there before the blind
+            # starts to move. Both spans come from BLIND_KF: they cannot drift.
+            f"@keyframes winvis{{0%,{k0-2}%{{display:none}}"
+            f"{k0-1}%,{k3+1}%{{display:inline}}{k3+2}%,100%{{display:none}}}}"
             ".spin{animation:spin 24s linear infinite;transform-box:fill-box;transform-origin:center}"
             ".rspin{animation:rspin 24s linear infinite;transform-box:fill-box;transform-origin:center}"
             ".scan{animation:scan 5s ease-in-out infinite}"
             ".wavef{animation:wavef 5s ease-in-out infinite}"
             ".light{animation:light 9s ease-in-out infinite}"
             ".lightb{animation:lightb 9s ease-in-out infinite}"
-            # resting state is *open*: prefers-reduced-motion kills the animation
-            # below, and a blind stuck closed would hide the starfield entirely
+            # both rest in the *open* state: prefers-reduced-motion kills the
+            # animations below, and a blind stuck shut (or a window stuck off)
+            # would hide the starfield entirely
             ".blind{animation:blind 75s ease-in-out infinite;transform-box:fill-box;"
             "transform-origin:center;transform:scale(0)}"
+            ".win{animation:winvis 75s ease-in-out infinite;display:inline}"
             "@media (prefers-reduced-motion:reduce){*{animation:none!important}}"
             "</style>")
 
@@ -557,8 +576,18 @@ def _assert_space(w, h):
         "a blind is painted over the triangles instead of under them"
     assert f"transform-origin:center;transform:scale(0)}}" in svg, \
         "blinds must rest open, so prefers-reduced-motion still shows the starfield"
+    assert ".win{animation:winvis 75s ease-in-out infinite;display:inline}" in svg, \
+        "windows must rest rendered, for the same reason"
     assert f'stroke-opacity="{SPACE_STROKE_O}"' not in svg, \
         "closeopen windows must not raise the whole lattice to the window border opacity"
+
+    # Every window carries its own blind's timing, so it hides exactly while
+    # covered. Desync here shows up as a starfield popping in over a shut blind.
+    wins = re.findall(r'class="win" style="([^"]+)"', svg)
+    blinds = re.findall(r'class="blind" style="([^"]+)"', svg)
+    assert wins == blinds != [], "a window is out of phase with its own blind"
+    assert 'class="win"' not in build_svg(w, h, bg="lights", bg_image="space", seed=0), \
+        "a bg without blinds has nothing covering its windows, so they must never switch off"
 
 
 def _assert_constraints(w, h):
