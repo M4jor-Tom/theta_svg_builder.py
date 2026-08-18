@@ -170,6 +170,49 @@ Three more things this depends on, all easy to break:
   the motion, never the picture.
 
 
+## Character rain (`--overlay matrix`)
+
+Columns of characters at `--matrix-angle` (0–360, `0` = downward, increasing
+clockwise) in `--matrix-color` (`#rrggbb` or `#rrggbbaa`).
+
+**The characters do not move.** Every cell of a column holds one glyph, chosen once
+at generation and fixed for good; what travels is the *lighting*. A head flares at
+one cell, steps down, and fades out over the next ~26% of the column, and each cell
+runs that same life one cell-time later than the one above it — so the head keeps
+advancing into a fresh character while the ones behind dim in place. Translating the
+glyphs instead reads completely differently: rigid words sliding across the canvas,
+which is what this is not.
+
+**"Brighter" is inverted here, deliberately.** The canvas is high-key, so on it a
+*more opaque* glyph is the loud one. The head is therefore the darkest character and
+the trail dissolves into the page — the opposite of the film, and the only reading
+that obeys rules 1 and 2. `MATRIX_HEAD_STEP` puts a visible step between the head and
+the cell behind it; without it the falloff alone is ~4% over one cell and the head
+reads as just another glyph.
+
+Three more constraints, all mood rather than technical:
+
+- The default colour is `#395e53b3` — `PAL['b']`, the existing sea-green, at 0.70.
+  **The default stays inside rule 3**; a caller who passes a saturated third hue is
+  overriding the mood on purpose, which is their call and is not enforced against.
+- A head takes **18–34 s** to walk its column, not the second or two the film uses,
+  and only ~34% of column slots carry one. Rule 5 has no exception for a recognisable
+  effect — and with the lighting travelling rather than the glyphs, a fast head reads
+  as flicker rather than as rain.
+- The rain is drawn **under the halo**, so the halo erases it around the icon the same
+  way it erases the lattice. Rule 4 again: the focal point is protected by
+  subtraction, and the layer needs no icon-exclusion logic of its own.
+
+ASCII only (digits, capitals, a handful of symbols). Katakana is the canonical look,
+but no font can be embedded without breaking the self-contained rule, so on a machine
+with no CJK font the whole layer would be tofu. The set also omits `< > & " '`, so a
+glyph never needs escaping.
+
+Each glyph's `fill-opacity` attribute carries the value its keyframes give it at
+`t=0`, and a presentation attribute loses to a running animation — so
+`prefers-reduced-motion` freezes the true opening frame rather than some other state.
+Same rule the blinds follow: motion off costs the motion, never the picture.
+
 ## Extending
 
 **Do:** reuse `PAL`; keep new strokes thin and uniform; make new motion slower
@@ -188,6 +231,7 @@ python3 background.py --bg static    --icon ship                     -r 1280x720
 python3 background.py --bg lights    --icon hexatri --bg-image space -r 1280x720 -o docs/mood/samples/lights-hexatri-space.svg
 python3 background.py --bg scan      --icon ship    --bg-image space -r 1280x720 -o docs/mood/samples/scan-ship-space.svg
 python3 background.py --bg closeopen --icon hexatri --bg-image space -r 1280x720 -o docs/mood/samples/closeopen-hexatri-space.svg
+python3 background.py --bg static    --overlay matrix --matrix-angle 250   -r 1280x720 -o docs/mood/samples/matrix-hexatri.svg
 ```
 
 The `.svg` files in `samples/` are the live artifacts — open them in a browser to

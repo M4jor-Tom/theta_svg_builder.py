@@ -15,6 +15,11 @@ Light theme only. The four axes below are independent and combine freely:
   --icon ship         simple delta spaceship (always static -- see below)
   --bg-image none     plain lattice
   --bg-image space    a few hexagons become windows onto a procedural starfield
+  --overlay none      nothing above the lattice
+  --overlay matrix    columns of characters at --matrix-angle in --matrix-color.
+                      The characters never move: a lit head walks down each
+                      column into the next fixed glyph while the ones behind it
+                      fade out in place
 
 Animation is pure CSS (no SMIL, no JS) and honours prefers-reduced-motion
 (which falls back to the clean static look). Stdlib only, no external assets:
@@ -29,16 +34,19 @@ both. Triangles never overlap and never sit behind the center icon.
 Space cells sit fully outside the icon's clear zone, and under --bg lights
 they pulse their border only -- a pale fill flash would wash the stars out.
 
-Two cross-axis rules, both rejected rather than silently ignored: --fg rotate
+Three cross-axis rules, all rejected rather than silently ignored: --fg rotate
 applies to --icon hexatri only (the ship is static by design, so --icon ship
-resolves --fg to static), and --bg closeopen needs a --bg-image to open onto.
+resolves --fg to static), --bg closeopen needs a --bg-image to open onto, and
+--matrix-angle / --matrix-color need --overlay matrix to steer.
 
 Everything except the animations depends only on --seed, so a given seed
-yields the same layout across every bg / fg / icon / bg-image combination.
+yields the same layout across every bg / fg / icon / bg-image / overlay
+combination -- the rain draws from its own stream and never moves a hexagon.
 
 Examples:
   bgsvg --bg lights --fg rotate --resolution 4k --out a.svg
   bgsvg --bg closeopen --bg-image space --resolution 2560x1440 --out b.svg
+  bgsvg --overlay matrix --matrix-angle 250 --matrix-color '#395e53cc'
   bgsvg --bg static --resolution mobile,1080p            # -> ./out/*.svg
 """
 import argparse
@@ -59,6 +67,7 @@ BG = ("static", "scan", "lights", "closeopen")
 FG = ("rotate", "static")
 ICON = ("hexatri", "ship")
 BG_IMAGE = ("none", "space")
+OVERLAY = ("none", "matrix")
 
 SQRT3 = math.sqrt(3)
 
@@ -98,6 +107,15 @@ def darken(h, t):
     return _mix(h, "#0c1017", t)
 
 
+def hex_rgba(s):
+    """'#rrggbb' or '#rrggbbaa' -> ('#rrggbb', alpha). Split rather than passed
+    through as an 8-digit hex so the trail can scale the alpha per glyph."""
+    m = re.fullmatch(r"#([0-9a-fA-F]{6})([0-9a-fA-F]{2})?", s.strip())
+    if not m:
+        raise ValueError(f"bad colour '{s}': use #rrggbb or #rrggbbaa")
+    return "#" + m.group(1).lower(), int(m.group(2) or "ff", 16) / 255
+
+
 # Light-theme palette: a = hexagons, b = triangles.
 PAL = dict(a=darken("#6fb7d1", 0.58), b=darken("#77c9a6", 0.58),
            bg=("#eef3f6", "#d9e3ea"), ink=darken("#6fb7d1", 0.70))
@@ -120,6 +138,24 @@ BLIND_S = (60, 90)      # per-cell shutter period, so cells never sync
 # is fully open over [1]..[2], and is shut again from [3]. The window behind it
 # derives its own on/off keyframes from these, so the two cannot drift apart.
 BLIND_KF = (44, 49, 53, 58)
+# --overlay matrix. Rule 5 still applies, so a head takes 18-34 s to walk a
+# column rather than the second or two the film uses, and only a third of the
+# column slots carry one. ASCII only: no font can be embedded without breaking
+# the self-contained rule, so a katakana set would be tofu wherever no CJK font
+# is installed. The set also excludes < > & " ' so glyphs never need escaping.
+MATRIX_GLYPHS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ*+-=/\\|:;.#$%@?!"
+MATRIX_COLOR = "#395e53b3"   # PAL['b'] at 0.70: the default stays in-palette
+MATRIX_FRAC = 0.34           # share of column slots carrying a stream
+MATRIX_S = (18, 34)          # seconds for a head to walk one column
+# One glyph's life, as percentages of that walk: it flares at 0, is down to trail
+# level by [0], and is out by [1]. The trail is therefore 26% of a column -- ~7
+# lit glyphs behind the head -- and [0] is about one cell-time, so the head holds
+# its own value for exactly its own turn.
+MATRIX_KF = (3, 29)
+# On a high-key canvas "brighter" means *more opaque*: the head is the darkest
+# glyph and the trail dissolves into the page. Without the step the head reads
+# as just another trail glyph, since the falloff alone is ~4% over one cell.
+MATRIX_HEAD_STEP = 0.62      # the drop from head to the glyph just behind it
 
 
 # ---- the shared grid ------------------------------------------------------
@@ -300,6 +336,80 @@ def pat_trihex(w, h, lat, bg, bg_image="none", seed=0):
     return voids + fills + out
 
 
+# ---- overlay --------------------------------------------------------------
+def pat_matrix(w, h, lat, seed, angle, color):
+    """--overlay matrix: columns of characters that stay put while a lit head
+    walks down them at `angle` degrees (0 = downward, increasing clockwise).
+
+    NOTHING MOVES. Every cell of a column holds one character, chosen once and
+    fixed for good; what travels is the lighting. Each glyph runs the same
+    keyframes -- flare to --o as the head arrives, step down to --t, fade out
+    over the trail -- offset by one cell-time per cell, so the head keeps
+    advancing into a fresh character while the ones behind it dim in place.
+    Translating the glyphs instead would slide the characters across the canvas,
+    which is the one thing this effect must not do.
+
+    The band is the canvas seen from the travel direction -- P across, T along --
+    so no cell is ever placed somewhere the canvas cannot reach. Cells are placed
+    by rotating their band coordinates here rather than by wrapping them in a
+    rotated group: glyphs have to stay upright at every angle, so a rotated group
+    would need a counter-rotation on every single one of them. Rotating in Python
+    leaves the output with no transform at all (~45 bytes a glyph, and at a steep
+    angle there are ~500 of them).
+
+    Each glyph's fill-opacity attribute holds the value its keyframes give it at
+    t=0, so prefers-reduced-motion freezes the true opening frame rather than
+    some other state: a still field of columns, each lit for the length of its
+    trail. The attribute loses to the animation while one is running.
+
+    Drawn under the halo, so the halo subtracts the rain around the icon the way
+    it subtracts the lattice -- the focal point stays uncontested for free.
+
+    Columns draw from cell_rng, off the global stream the lattice uses, so
+    switching the overlay on cannot move a hexagon. Keyed by slot rather than
+    draw order for the reason cell_rng exists: the slot count follows the angle,
+    so a shared stream would reshuffle every glyph when the rain is merely
+    re-aimed."""
+    rgb, alpha = hex_rgba(color)
+    hold, out_at = MATRIX_KF
+    rad = math.radians(angle)
+    co, si = math.cos(rad), math.sin(rad)
+    P, T = w * abs(co) + h * abs(si), w * abs(si) + h * abs(co)   # the band, across x along
+    fs = lat.u / 28.0
+    pitch, step = fs * 1.6, fs * 1.05
+    cx0, cy0 = lat.cx0, lat.cy0
+    N = int(T / step) + 2                        # cells spanning the band, head to tail
+    out = [f'<g class="matrix" font-family="monospace" font-size="{fmt(fs)}" '
+           f'text-anchor="middle" fill="{rgb}" '
+           f'style="--o:{fmt(alpha)};--t:{fmt(alpha * MATRIX_HEAD_STEP)}">']
+    for i in range(int(P / pitch) + 1):
+        g = cell_rng("rain", seed, 0, i)
+        if g.random() > MATRIX_FRAC:
+            continue
+        dx = i * pitch - P / 2
+        dur = g.uniform(*MATRIX_S)
+        head = g.randrange(N)                    # the cell lit at t=0
+        # --d is inherited by every glyph below, so a column sets its speed once
+        # instead of repeating animation-duration on all N of them
+        out.append(f'<g style="--d:{fmt(dur)}s">')
+        for j in range(N):
+            dy = j * step - T / 2
+            pct = 100.0 * ((head - j) % N) / N    # how far into its cycle this cell is
+            if pct <= hold:                       # ...evaluated against the keyframes,
+                o = alpha * (1 - (1 - MATRIX_HEAD_STEP) * pct / hold)
+            elif pct <= out_at:
+                o = alpha * MATRIX_HEAD_STEP * (1 - (pct - hold) / (out_at - hold))
+            else:
+                o = 0.0
+            out.append(f'<text class="rain" x="{fmt(cx0 + dx * co - dy * si)}" '
+                       f'y="{fmt(cy0 + dx * si + dy * co)}" '
+                       f'style="animation-delay:-{fmt(dur * (head + N - j) / N)}s" '
+                       f'fill-opacity="{fmt(o)}">{g.choice(MATRIX_GLYPHS)}</text>')
+        out.append("</g>")
+    out.append("</g>")
+    return "".join(out)
+
+
 # ---- center icon ----------------------------------------------------------
 def ico_hexatri(fg):
     """Nested hexagon<->triangle glyph. fg=='rotate' -> the two triangle rings
@@ -348,6 +458,7 @@ def ico_ship():
 # ---- assembly -------------------------------------------------------------
 def css():
     k0, k1, k2, k3 = BLIND_KF
+    f0, f1 = MATRIX_KF
     return ("<style>"
             "@keyframes spin{to{transform:rotate(360deg)}}"
             "@keyframes rspin{to{transform:rotate(-360deg)}}"
@@ -379,11 +490,19 @@ def css():
             ".blind{animation:blind 75s ease-in-out infinite;transform-box:fill-box;"
             "transform-origin:center;transform:scale(0)}"
             ".win{animation:winvis 75s ease-in-out infinite;display:inline}"
+            # One glyph's life, and the only thing --overlay matrix animates: the
+            # characters never move, the lighting does. --o/--t (the colour's alpha
+            # and its trail step) and --d (the column's speed) are all inherited
+            # from ancestors, so a glyph itself only has to carry its delay.
+            f"@keyframes rain{{0%{{fill-opacity:var(--o)}}{f0}%{{fill-opacity:var(--t)}}"
+            f"{f1}%,100%{{fill-opacity:0}}}}"
+            ".rain{animation:rain var(--d) linear infinite}"
             "@media (prefers-reduced-motion:reduce){*{animation:none!important}}"
             "</style>")
 
 
-def build_svg(w, h, bg="static", fg="rotate", icon="hexatri", bg_image="none", seed=0):
+def build_svg(w, h, bg="static", fg="rotate", icon="hexatri", bg_image="none", seed=0,
+              overlay="none", matrix_angle=0.0, matrix_color=MATRIX_COLOR):
     random.seed(f"trihex:{seed}")   # layout depends only on seed, not bg/fg/icon/image
     lat = lattice(w, h)
     u, clear_r = lat.u, lat.clear_r
@@ -408,6 +527,7 @@ def build_svg(w, h, bg="static", fg="rotate", icon="hexatri", bg_image="none", s
                  for gid, col in (("neba", "#6fb7d1"), ("nebb", "#77c9a6"))]
 
     bg_svg = pat_trihex(w, h, lat, bg, bg_image, seed)
+    rain_svg = pat_matrix(w, h, lat, seed, matrix_angle, matrix_color) if overlay == "matrix" else ""
     k = u * 0.34 / 200
     glyph = ico_ship() if icon == "ship" else ico_hexatri(fg)
     icon_svg = (f'<g transform="translate({fmt(w/2)},{fmt(h/2)}) scale({fmt(k)})" filter="url(#ink)">'
@@ -418,12 +538,14 @@ def build_svg(w, h, bg="static", fg="rotate", icon="hexatri", bg_image="none", s
     if bg_image == "space":
         label += (", some hexagons opening and closing onto a starfield"
                   if bg == "closeopen" else ", some hexagons showing a starfield")
+    if overlay == "matrix":
+        label += ", with streams of characters drifting across it"
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {fmt(w)} {fmt(h)}" width="{fmt(w)}" height="{fmt(h)}" '
         f'preserveAspectRatio="xMidYMid slice" role="img" aria-label="{label}"><title>{label}</title>'
         f'<defs>{"".join(defs)}</defs>{css()}'
         f'<rect width="{fmt(w)}" height="{fmt(h)}" fill="url(#bg)"/>'
-        f'<g>{"".join(bg_svg)}</g>'
+        f'<g>{"".join(bg_svg)}</g>{rain_svg}'
         f'<circle cx="{fmt(w/2)}" cy="{fmt(h/2)}" r="{fmt(clear_r)}" fill="url(#halo)"/>'
         f'<rect width="{fmt(w)}" height="{fmt(h)}" fill="url(#vig)"/>{icon_svg}</svg>\n')
 
@@ -447,6 +569,11 @@ def main(argv=None):
     ap.add_argument("--icon", default="hexatri", choices=ICON, help="center glyph")
     ap.add_argument("--bg-image", dest="bg_image", default="none", choices=BG_IMAGE,
                     help="imagery inside some hexagons (required by --bg closeopen)")
+    ap.add_argument("--overlay", default="none", choices=OVERLAY, help="layer above the lattice")
+    ap.add_argument("--matrix-angle", dest="matrix_angle", type=float, default=None,
+                    help="--overlay matrix travel direction, 0-360 (0 = down, clockwise; default 0)")
+    ap.add_argument("--matrix-color", dest="matrix_color", default=None,
+                    help=f"--overlay matrix colour, #rrggbb or #rrggbbaa (default {MATRIX_COLOR})")
     ap.add_argument("-r", "--resolution", default="1080p", help="comma list of presets or WIDTHxHEIGHT")
     ap.add_argument("-o", "--out", default=None, help="output .svg file, '-' for stdout, or a directory")
     ap.add_argument("-s", "--seed", type=int, default=0)
@@ -459,6 +586,8 @@ def main(argv=None):
         print("fg:       " + ", ".join(FG) + "   (rotate: --icon hexatri only)")
         print("icon:     " + ", ".join(ICON))
         print("bg-image: " + ", ".join(BG_IMAGE))
+        print("overlay:  " + ", ".join(OVERLAY)
+              + f"   (matrix: --matrix-angle 0-360, --matrix-color #rrggbbaa, default {MATRIX_COLOR})")
         print("presets:  " + ", ".join(f"{k} ({w}x{h})" for k, (w, h) in PRESETS.items()))
         return 0
     if args.selftest:
@@ -471,12 +600,28 @@ def main(argv=None):
         ap.error("--bg closeopen has nothing to reveal with --bg-image none (its "
                  "hexagons open onto a background image); add --bg-image space, or "
                  "use --bg lights")
+    if args.overlay != "matrix":
+        for flag, val in (("--matrix-angle", args.matrix_angle),
+                          ("--matrix-color", args.matrix_color)):
+            if val is not None:
+                ap.error(f"{flag} has no rain to steer with --overlay {args.overlay}; "
+                         f"add --overlay matrix, or drop {flag}")
+    angle = args.matrix_angle if args.matrix_angle is not None else 0.0
+    if not 0 <= angle <= 360:
+        ap.error(f"--matrix-angle {fmt(angle)} is outside 0-360 (0 = falling down, "
+                 "increasing clockwise)")
+    color = args.matrix_color or MATRIX_COLOR
+    try:
+        hex_rgba(color)
+    except ValueError as e:
+        ap.error(f"--matrix-color: {e}")
     fg = args.fg or ("static" if args.icon == "ship" else "rotate")
 
     resolutions = [parse_res(r) for r in args.resolution.split(",")]
 
     def render(w, h):
-        return build_svg(w, h, args.bg, fg, args.icon, args.bg_image, args.seed)
+        return build_svg(w, h, args.bg, fg, args.icon, args.bg_image, args.seed,
+                         args.overlay, angle, color)
 
     if len(resolutions) == 1 and args.out == "-":
         sys.stdout.write(render(*resolutions[0]))
@@ -491,7 +636,8 @@ def main(argv=None):
     os.makedirs(outdir, exist_ok=True)
     for w, h in resolutions:   # every axis, always, in flag order -- no optional parts
         path = os.path.join(
-            outdir, f"trihex-{args.bg}-{fg}-{args.icon}-{args.bg_image}-{w}x{h}.svg")
+            outdir,
+            f"trihex-{args.bg}-{fg}-{args.icon}-{args.bg_image}-{args.overlay}-{w}x{h}.svg")
         with open(path, "w") as f:
             f.write(render(w, h))
         print(path)
@@ -505,27 +651,42 @@ def selftest():
         for fg in FG:
             for icon in ICON:
                 for img in BG_IMAGE:
-                    svg = build_svg(640, 360, bg=bg, fg=fg, icon=icon, bg_image=img, seed=1)
-                    parseString(svg)
-                    assert svg.startswith("<svg") and "prefers-reduced-motion" in svg
-                    assert ("<line x1=" in svg) == (icon == "ship"), "icon dispatch is wrong"
-                    assert ("<clipPath" in svg) == (img == "space"), "bg-image dispatch is wrong"
-                    assert ('class="blind"' in svg) == (bg == "closeopen" and img == "space"), \
-                        "blinds must exist exactly when closeopen has windows to cover"
-                    n += 1
+                    for ov in OVERLAY:
+                        svg = build_svg(640, 360, bg=bg, fg=fg, icon=icon, bg_image=img,
+                                        seed=1, overlay=ov)
+                        parseString(svg)
+                        assert svg.startswith("<svg") and "prefers-reduced-motion" in svg
+                        assert ("<line x1=" in svg) == (icon == "ship"), "icon dispatch is wrong"
+                        assert ("<clipPath" in svg) == (img == "space"), "bg-image dispatch is wrong"
+                        assert ('class="blind"' in svg) == (bg == "closeopen" and img == "space"), \
+                            "blinds must exist exactly when closeopen has windows to cover"
+                        assert ('class="rain"' in svg) == (ov == "matrix"), "overlay dispatch is wrong"
+                        n += 1
     _assert_constraints(1920, 1080)
     _assert_constraints(1080, 1920)
     _assert_space(1920, 1080)
     _assert_space(1080, 1920)
+    _assert_matrix(1920, 1080)
+    _assert_matrix(1080, 1920)
 
     _assert_rejected(["--icon", "ship", "--fg", "rotate", "-o", "-"],
                      "--icon ship --fg rotate must be rejected")
     _assert_rejected(["--bg", "closeopen", "-o", "-"],
                      "--bg closeopen --bg-image none must be rejected")
+    _assert_rejected(["--matrix-angle", "90", "-o", "-"],
+                     "--matrix-angle without --overlay matrix must be rejected")
+    _assert_rejected(["--matrix-color", "#112233", "-o", "-"],
+                     "--matrix-color without --overlay matrix must be rejected")
+    _assert_rejected(["--overlay", "matrix", "--matrix-angle", "400", "-o", "-"],
+                     "an out-of-range --matrix-angle must be rejected")
+    _assert_rejected(["--overlay", "matrix", "--matrix-color", "395e53", "-o", "-"],
+                     "a malformed --matrix-color must be rejected")
 
-    print(f"selftest ok: {n} bg x fg x icon x bg-image combos valid; holder/intersector, "
-          "clear-center, space-cell clearance/lights-opt-out/blind layering hold; "
-          "ship rejects --fg rotate, closeopen rejects --bg-image none")
+    print(f"selftest ok: {n} bg x fg x icon x bg-image x overlay combos valid; "
+          "holder/intersector, clear-center, space-cell clearance/lights-opt-out/blind "
+          "layering hold; rain stays upright, fades from its head and never moves the "
+          "lattice; ship rejects --fg rotate, closeopen rejects --bg-image none, the "
+          "--matrix-* flags reject a missing overlay, a bad angle and a bad colour")
     return 0
 
 
@@ -588,6 +749,75 @@ def _assert_space(w, h):
     assert wins == blinds != [], "a window is out of phase with its own blind"
     assert 'class="win"' not in build_svg(w, h, bg="lights", bg_image="space", seed=0), \
         "a bg without blinds has nothing covering its windows, so they must never switch off"
+
+
+def _assert_matrix(w, h):
+    """The characters must stay put while the lighting walks the column, stay
+    upright at any angle, and leave the lattice byte-identical: the overlay is a
+    layer, never a layout input."""
+    from xml.dom.minidom import parseString
+
+    def polys(s):                       # the lattice and its triangles, verbatim
+        return re.findall(r"<polygon[^>]*>", s)
+
+    def columns(s):
+        return re.findall(r'<g style="--d:[^"]*">(.*?)</g>', s)
+
+    plain = build_svg(w, h, bg="lights", bg_image="space", seed=3)
+    for angle in (0, 90, 181, 359.5):
+        svg = build_svg(w, h, bg="lights", bg_image="space", seed=3,
+                        overlay="matrix", matrix_angle=angle)
+        parseString(svg)
+        assert polys(svg) == polys(plain), f"the overlay moved the lattice at {fmt(angle)} deg"
+
+        # Cells are rotated into place in Python, so glyphs are upright at every
+        # angle for free. A transform creeping back in means either tilted
+        # characters or ~45 wasted bytes on each of ~500 of them.
+        layer = svg[svg.index('class="matrix"'):svg.index("<circle")]
+        assert "transform" not in layer, \
+            f"a rain glyph carries a transform at {fmt(angle)} deg"
+        glyphs = re.findall(r"<text[^>]*>(.)</text>", svg)
+        assert glyphs and set(glyphs) <= set(MATRIX_GLYPHS), "a glyph is off the set"
+
+        cols = columns(svg)
+        assert cols, "no rain columns were placed"
+        assert len({col.count("<text") for col in cols}) == 1, \
+            "every column must span the whole band, or a head would stop mid-canvas"
+        for col in cols:
+            o = [float(v) for v in re.findall(r'fill-opacity="([\d.]+)"', col)]
+            lit = [v for v in o if v]
+            assert 0 < len(lit) < len(o), \
+                "a column must be part lit and part dark -- that gap is the trail"
+            assert o.count(max(o)) == 1, "a column must have exactly one head"
+            # Walking back from the head must give one contiguous run that only
+            # ever dims. Anything else means the stagger is not advancing the
+            # lighting a single cell at a time.
+            head = o.index(max(o))
+            run = [o[(head - k) % len(o)] for k in range(len(lit))]
+            assert all(run) and run == sorted(run, reverse=True), \
+                "the trail must be one contiguous run fading back from the head"
+
+        # The stagger IS the travel: consecutive cells are one cell-time apart, so
+        # the lighting advances by exactly one character per step. Collapse these
+        # to a single delay and the whole column flashes at once instead.
+        d = [float(v) for v in re.findall(r"animation-delay:-([\d.]+)s", cols[0])]
+        gaps = [d[k] - d[k + 1] for k in range(len(d) - 1)]
+        assert min(gaps) > 0 and max(gaps) - min(gaps) <= 0.02, \
+            "glyph delays must step by one constant cell-time down the column"
+
+    # The characters are anchored by x/y and only their opacity is animated. An
+    # animated transform here would slide them across the canvas, which is the
+    # one thing this effect must not do.
+    assert "translate" not in re.search(r"@keyframes rain\{[^}]*\}[^}]*\}", svg).group(), \
+        "the rain keyframes must animate opacity only -- characters never move"
+    assert ".rain{animation:rain var(--d) linear infinite}" in svg, \
+        "columns must take their speed from the inherited --d"
+
+    # The colour is split into fill + alpha (the trail scales it) rather than
+    # passed through as an 8-digit hex, and the alpha reaches the glyphs as --o.
+    svg = build_svg(w, h, overlay="matrix", matrix_color="#8899aa80")
+    assert 'fill="#8899aa"' in svg and "#8899aa80" not in svg, "--matrix-color is not applied"
+    assert f"--o:{fmt(0x80 / 255)};" in svg, "the colour's alpha never reaches the glyphs"
 
 
 def _assert_constraints(w, h):
