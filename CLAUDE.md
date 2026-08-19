@@ -15,7 +15,7 @@ nix develop -c protoc --python_out=. parameters.proto   # regenerate _pb2
 ```
 Without Nix, `background.py` runs on any Python 3 with `protobuf` installed.
 
-`--selftest` is the only test: it builds all 64 `bg × fg × icon × bg-image × overlay` combinations, parses each as XML, and asserts the invariants below (`selftest`/`_assert_*` in `background.py`). Treat a change as unfinished until it passes.
+`--selftest` is the only test: it builds all 42 valid `background.motion` × `background.image` × `icon` × `overlay` combinations, parses each as XML, and asserts the invariants below (`selftest`/`_assert_*` in `background.py`). Treat a change as unfinished until it passes.
 
 ## Architecture
 
@@ -33,7 +33,7 @@ leaves `CLOSEOPEN` + `NONE` expressible; `validate()` rejects it, along with
 the angle range, the colour format and the resolution format. When adding a
 rule, try moving a field before adding a check.
 
-**Determinism** — geometry depends ONLY on `--seed`; the animation/icon/image/overlay choices never move a hexagon. Same seed ⇒ same layout across every combination. `pat_matrix` gets its own `random.Random` for exactly this reason, and `_assert_matrix` compares every `<polygon>` overlay-on vs overlay-off. Keep new features on this rule so seeds stay stable.
+**Determinism** — geometry depends ONLY on `seed`; the animation/icon/image/overlay choices never move a hexagon. Same seed ⇒ same layout across every combination. `pat_matrix` gets its own `random.Random` for exactly this reason, and `_assert_matrix` compares every `<polygon>` overlay-on vs overlay-off. Keep new features on this rule so seeds stay stable.
 
 **Pure CSS animation, reduced-motion-safe** — animation is `@keyframes` embedded in the SVG (no SMIL, no JS), and every animated element MUST have a resting state that `prefers-reduced-motion` falls back to (the clean static look). `css()` centralizes this.
 

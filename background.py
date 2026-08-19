@@ -123,13 +123,13 @@ PAL = dict(a=darken("#6fb7d1", 0.58), b=darken("#77c9a6", 0.58),
 STROKE_O = 0.27   # hexagon border baseline opacity (also the reduced-motion value)
 FILL_O = 0.38     # triangle fill baseline opacity
 
-# --bg-image space. VOID stays in the blue-slate family rather than going black:
+# background.image STARFIELD. VOID stays in the blue-slate family rather than going black:
 # a true #000 reads as a hole punched in from a different design.
 VOID = darken("#6fb7d1", 0.90)
 SPACE_FRAC = 0.08       # share of eligible hexagons that become windows
 SPACE_STARS = 24        # scattered per cell bbox; ~75% survive the hexagon clip
 SPACE_STROKE_O = 0.34   # a space cell's border sits a touch brighter than the field
-# --bg closeopen. Every eligible hexagon is a window, so the *duty cycle* is what
+# background.motion CLOSEOPEN. Every eligible hexagon is a window, so the *duty cycle* is what
 # keeps the field sparse: a cell shows something for ~14% of its period and is
 # fully open for ~4%, which leaves a handful open at a time out of ~77. The period
 # is long because lowering the ratio alone would turn each opening into a blink.
@@ -138,7 +138,7 @@ BLIND_S = (60, 90)      # per-cell shutter period, so cells never sync
 # is fully open over [1]..[2], and is shut again from [3]. The window behind it
 # derives its own on/off keyframes from these, so the two cannot drift apart.
 BLIND_KF = (44, 49, 53, 58)
-# --overlay matrix. Rule 5 still applies, so a head takes 18-34 s to walk a
+# overlay.matrix. Rule 5 still applies, so a head takes 18-34 s to walk a
 # column rather than the second or two the film uses, and only a third of the
 # column slots carry one. ASCII only: no font can be embedded without breaking
 # the self-contained rule, so a katakana set would be tofu wherever no CJK font
@@ -190,7 +190,7 @@ def space_cells(lat, seed, every=False):
     whole hexagon clears the icon zone (centre distance >= clear_r + s), the same
     exclusion the triangles obey.
 
-    every=True (--bg closeopen) takes the entire eligible field instead of a
+    every=True (background.motion CLOSEOPEN) takes the entire eligible field instead of a
     SPACE_FRAC sample: the blinds hold all but a handful shut at any instant, so
     sparseness moves from space to time and a window can open anywhere rather
     than always in the same seven places."""
@@ -208,7 +208,7 @@ def space_cell(seed, poly, cx, cy, s, r, c, phase=None):
     """One hexagon of procedural deep space: clipped void ground, a faint nebula,
     then seeded stars. Drawn, never embedded -- no assets, crisp at any size.
 
-    phase (--bg closeopen) is its blind's timing, which makes the cell switch
+    phase (background.motion CLOSEOPEN) is its blind's timing, which makes the cell switch
     itself off while that blind covers it. SVG does no occlusion culling, so
     without this the stars are repainted every frame under a shut blind."""
     g = cell_rng("star", seed, r, c)
@@ -241,7 +241,7 @@ def space_cell(seed, poly, cx, cy, s, r, c, phase=None):
 
 # ---- background pattern ---------------------------------------------------
 def blind_phase(seed, r, c):
-    """--bg closeopen: the timing of one cell's shutter, drawn from the cell's own
+    """background.motion CLOSEOPEN: the timing of one cell's shutter, drawn from the cell's own
     stream rather than draw order. The blind and the window it covers are given
     this same string, so the window can switch itself off exactly while it is
     hidden -- one value, two users, no way for them to fall out of step."""
@@ -338,7 +338,7 @@ def pat_trihex(w, h, lat, bg, bg_image="none", seed=0):
 
 # ---- overlay --------------------------------------------------------------
 def pat_matrix(w, h, lat, seed, angle, color):
-    """--overlay matrix: columns of characters that stay put while a lit head
+    """overlay.matrix: columns of characters that stay put while a lit head
     walks down them at `angle` degrees (0 = downward, increasing clockwise).
 
     NOTHING MOVES. Every cell of a column holds one character, chosen once and
@@ -534,7 +534,7 @@ def css():
             ".blind{animation:blind 75s ease-in-out infinite;transform-box:fill-box;"
             "transform-origin:center;transform:scale(0)}"
             ".win{animation:winvis 75s ease-in-out infinite;display:inline}"
-            # One glyph's life, and the only thing --overlay matrix animates: the
+            # One glyph's life, and the only thing overlay.matrix animates: the
             # characters never move, the lighting does. --o/--t (the colour's alpha
             # and its trail step) and --d (the column's speed) are all inherited
             # from ancestors, so a glyph itself only has to carry its delay.
@@ -553,7 +553,7 @@ def build_svg(w, h, bg="static", fg="rotate", icon="hexatri", bg_image="none", s
     defs = [
         # userSpaceOnUse so any shape can paint canvas: the default objectBoundingBox
         # would squeeze the whole ramp into a single hexagon, and a closed blind
-        # (--bg closeopen) would read as a patch instead of vanishing into the page.
+        # (background.motion CLOSEOPEN) would read as a patch instead of vanishing into the page.
         f'<linearGradient id="bg" gradientUnits="userSpaceOnUse" x1="0" y1="0" '
         f'x2="{fmt(w * 0.4)}" y2="{fmt(h)}"><stop offset="0%" stop-color="{PAL["bg"][0]}"/>'
         f'<stop offset="100%" stop-color="{PAL["bg"][1]}"/></linearGradient>',
@@ -828,7 +828,7 @@ def _assert_rejected(config, why):
 def _assert_space(w, h):
     """Space cells must clear the icon zone entirely, stay sparse, never take the
     fill-flashing .light class (which would wash the starfield out), and under
-    --bg closeopen carry exactly one blind apiece, layered under the triangles."""
+    background.motion CLOSEOPEN carry exactly one blind apiece, layered under the triangles."""
     lat = lattice(w, h)
     space = space_cells(lat, 0)
     for (r, c) in space:
@@ -875,7 +875,7 @@ def _assert_space(w, h):
 
 
 def _assert_ship():
-    """--icon ship must read as a folded solid: four facets that tile the hull
+    """icon.ship must read as a folded solid: four facets that tile the hull
     exactly (so the cloak never moved the silhouette), no two at the same value
     (so every fold has relief), none opaque (so it stays a cloak), and every ramp
     spanning the glyph rather than restarting inside a facet.
@@ -968,7 +968,7 @@ def _assert_matrix(w, h):
     # The colour is split into fill + alpha (the trail scales it) rather than
     # passed through as an 8-digit hex, and the alpha reaches the glyphs as --o.
     svg = build_svg(w, h, overlay="matrix", matrix_color="#8899aa80")
-    assert 'fill="#8899aa"' in svg and "#8899aa80" not in svg, "--matrix-color is not applied"
+    assert 'fill="#8899aa"' in svg and "#8899aa80" not in svg, "overlay.matrix.color is not applied"
     assert f"--o:{fmt(0x80 / 255)};" in svg, "the colour's alpha never reaches the glyphs"
 
 
