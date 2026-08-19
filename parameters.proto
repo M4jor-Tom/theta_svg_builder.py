@@ -1,0 +1,67 @@
+syntax = "proto3";
+package svg_builder;
+
+// One render, fully described. Every zero value is the old CLI's default, so an
+// empty `{}` renders exactly what bare `bgsvg` rendered with no flags.
+message Parameters {
+  uint32     seed       = 1;  // geometry depends on this and nothing else
+  Output     output     = 2;  // unset -> ./out at 1080p
+  Background background = 3;  // unset -> plain lattice, no animation
+  Icon       icon       = 4;  // unset -> hexatri, rotating
+  Overlay    overlay    = 5;  // unset -> nothing above the lattice
+}
+
+// ---- output: the sink decides the cardinality ---------------------------
+// A file and stdout are one stream, so they carry one resolution; only a
+// directory carries a list. Writing many resolutions to one file is therefore
+// unrepresentable rather than silently reinterpreted as a directory.
+message Output {
+  oneof sink {
+    File      file      = 1;
+    Stdout    stdout    = 2;
+    Directory directory = 3;
+  }
+}
+message File      { string path = 1; string resolution = 2; }
+message Stdout    { string resolution = 1; }
+message Directory { string path = 1; repeated string resolutions = 2; }
+// resolution: a preset (720p 1080p 1440p 4k mobile tablet square ultrawide)
+// or WIDTHxHEIGHT. Empty = 1080p.
+
+// ---- background ---------------------------------------------------------
+// Motion and image are independent, exactly as pat_trihex takes them. The one
+// rule that crosses them -- CLOSEOPEN needs windows to open onto -- is the one
+// conditional proto3 cannot express; it stays a check in validate().
+message Background {
+  enum Motion { STATIC = 0; SCAN = 1; LIGHTS = 2; CLOSEOPEN = 3; }
+  enum Image  { NONE = 0; STARFIELD = 1; }
+  Motion motion = 1;
+  Image  image  = 2;
+}
+
+// ---- icon ---------------------------------------------------------------
+// rotate lives inside hexatri and nowhere else: it is that glyph's own
+// animation, not a global foreground axis. A future icon declares whatever
+// motion vocabulary it actually has; the ship, static by design, declares none.
+message Icon {
+  oneof glyph {
+    Hexatri hexatri = 1;
+    Ship    ship    = 2;
+  }
+}
+message Hexatri {
+  enum Motion { ROTATE = 0; STATIC = 1; }   // zero = the old default
+  Motion motion = 1;
+}
+message Ship {}
+
+// ---- overlay ------------------------------------------------------------
+// angle and colour live inside matrix: with no rain there is nothing to
+// steer, so they cannot be written without it.
+message Overlay {
+  oneof layer { Matrix matrix = 1; }
+}
+message Matrix {
+  double angle = 1;  // 0-360, 0 = falling down, increasing clockwise
+  string color = 2;  // #rrggbb or #rrggbbaa; empty = default
+}
