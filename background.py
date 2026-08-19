@@ -711,22 +711,33 @@ def main(argv=None):
 def selftest():
     from xml.dom.minidom import parseString
     n = 0
-    for bg in BG:
-        for fg in FG:
-            for icon in ICON:
-                for img in BG_IMAGE:
-                    for ov in OVERLAY:
-                        svg = build_svg(640, 360, bg=bg, fg=fg, icon=icon, bg_image=img,
-                                        seed=1, overlay=ov)
-                        parseString(svg)
-                        assert svg.startswith("<svg") and "prefers-reduced-motion" in svg
-                        assert ("<line x1=" in svg) == (icon == "ship"), "icon dispatch is wrong"
-                        assert ("url(#shp" in svg) == (icon == "ship"), "ship facets leaked across icons"
-                        assert ("<clipPath" in svg) == (img == "space"), "bg-image dispatch is wrong"
-                        assert ('class="blind"' in svg) == (bg == "closeopen" and img == "space"), \
-                            "blinds must exist exactly when closeopen has windows to cover"
-                        assert ('class="rain"' in svg) == (ov == "matrix"), "overlay dispatch is wrong"
-                        n += 1
+    for motion in ("STATIC", "SCAN", "LIGHTS", "CLOSEOPEN"):
+        for image in ("NONE", "STARFIELD"):
+            if motion == "CLOSEOPEN" and image == "NONE":
+                continue                      # rejected below, not renderable
+            for glyph in ({"hexatri": {"motion": "ROTATE"}},
+                          {"hexatri": {"motion": "STATIC"}},
+                          {"ship": {}}):
+                for overlay in ({}, {"matrix": {"angle": 250, "color": "#395e53cc"}}):
+                    kw = resolve(validate(parse({
+                        "seed": 1,
+                        "background": {"motion": motion, "image": image},
+                        "icon": glyph,
+                        "overlay": overlay})))
+                    svg = build_svg(640, 360, **kw)
+                    parseString(svg)
+                    assert svg.startswith("<svg") and "prefers-reduced-motion" in svg
+                    assert ("<line x1=" in svg) == (kw["icon"] == "ship"), \
+                        "icon dispatch is wrong"
+                    assert ("url(#shp" in svg) == (kw["icon"] == "ship"), \
+                        "ship facets leaked across icons"
+                    assert ("<clipPath" in svg) == (kw["bg_image"] == "space"), \
+                        "bg-image dispatch is wrong"
+                    assert ('class="blind"' in svg) == (kw["bg"] == "closeopen"), \
+                        "blinds must exist exactly when closeopen has windows to cover"
+                    assert ('class="rain"' in svg) == (kw["overlay"] == "matrix"), \
+                        "overlay dispatch is wrong"
+                    n += 1
     _assert_constraints(1920, 1080)
     _assert_constraints(1080, 1920)
     _assert_space(1920, 1080)
@@ -755,12 +766,14 @@ def selftest():
     _assert_rejected("{not json", "malformed JSON must be rejected")
     _assert_rejected(None, "a missing config file must be rejected")
 
-    print(f"selftest ok: {n} bg x fg x icon x bg-image x overlay combos valid; "
+    print(f"selftest ok: {n} background x icon x overlay configs valid; "
           "holder/intersector, clear-center, space-cell clearance/lights-opt-out/blind "
           "layering hold; rain stays upright, fades from its head and never moves the "
           "lattice; the ship's facets tile its hull at four translucent values under "
-          "one light; ship rejects --fg rotate, closeopen rejects --bg-image none, the "
-          "--matrix-* flags reject a missing overlay, a bad angle and a bad colour")
+          "one light; an empty config renders the old defaults, and the schema or a "
+          "check rejects a ship motion, a stray matrix knob, two sinks, a typo'd key, "
+          "closeopen without an image, a bad angle, a bad colour, a bad resolution, "
+          "malformed JSON and a missing file")
     return 0
 
 
