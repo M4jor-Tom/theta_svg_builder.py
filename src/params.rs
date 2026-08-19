@@ -13,10 +13,230 @@ mod generated {
 }
 pub use generated::*;
 
+use crate::Error;
+use crate::style::{MATRIX_COLOR, hex_rgba};
+
 /// Rejecting a typo'd key, a value of the wrong type and two members of one
 /// oneof is the schema's job, so none of it is re-checked here.
 pub fn parse(text: &str) -> Result<Parameters, serde_json::Error> {
     serde_json::from_str(text)
+}
+
+/// The centre glyph. The ship declares no motion -- in the schema because it is
+/// static by design, and here as a variant with no field, so no renderer can
+/// ask a ship whether it rotates.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Glyph {
+    Hexatri { rotate: bool },
+    Ship,
+}
+
+/// The overlay's parameters, present only when there is rain to steer.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Rain {
+    pub angle: f64,
+    pub color: String,
+}
+
+/// One render, flattened into what the renderer needs. `Parameters` is a
+/// boundary format -- output sinks, resolutions and JSON shapes stop here.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Scene {
+    pub seed: u32,
+    pub motion: background::Motion,
+    pub image: background::Image,
+    pub glyph: Glyph,
+    pub overlay: Option<Rain>,
+}
+
+impl Scene {
+    /// The renderer's old lowercase vocabulary, kept because it names the
+    /// output files: `out/trihex-lights-rotate-hexatri-space-none-1920x1080.svg`.
+    /// STARFIELD is `space` here for the same reason -- that is the name the
+    /// files have always had.
+    pub fn slug(&self) -> String {
+        let motion = match self.motion {
+            background::Motion::Static => "static",
+            background::Motion::Scan => "scan",
+            background::Motion::Lights => "lights",
+            background::Motion::Closeopen => "closeopen",
+        };
+        let (fg, icon) = match self.glyph {
+            Glyph::Hexatri { rotate: true } => ("rotate", "hexatri"),
+            Glyph::Hexatri { rotate: false } => ("static", "hexatri"),
+            Glyph::Ship => ("static", "ship"),
+        };
+        let image = match self.image {
+            background::Image::None => "none",
+            background::Image::Starfield => "space",
+        };
+        let overlay = if self.overlay.is_some() {
+            "matrix"
+        } else {
+            "none"
+        };
+        format!("{motion}-{fg}-{icon}-{image}-{overlay}")
+    }
+}
+
+/// Flatten the message into a Scene. This is the only place the schema's
+/// vocabulary and the renderer's meet.
+pub fn resolve(p: &Parameters) -> Scene {
+    let bg = p.background.unwrap_or_default();
+    let glyph = match p.icon.as_ref().and_then(|i| i.glyph.as_ref()) {
+        Some(icon::Glyph::Ship(_)) => Glyph::Ship,
+        Some(icon::Glyph::Hexatri(h)) => Glyph::Hexatri {
+            rotate: h.motion() == hexatri::Motion::Rotate,
+        },
+        None => Glyph::Hexatri { rotate: true },
+    };
+    let overlay =
+        p.overlay
+            .as_ref()
+            .and_then(|o| o.layer.as_ref())
+            .map(|overlay::Layer::Matrix(m)| Rain {
+                angle: m.angle,
+                color: if m.color.is_empty() {
+                    MATRIX_COLOR.to_string()
+                } else {
+                    m.color.clone()
+                },
+            });
+    Scene {
+        seed: p.seed,
+        motion: bg.motion(),
+        image: bg.image(),
+        glyph,
+        overlay,
+    }
+}
+
+/// The rules parameters.proto cannot state. Everything else is structural --
+/// if a new rule can be expressed by moving a field, move the field instead of
+/// adding a check here.
+pub fn validate(p: &Parameters) -> Result<(), Error> {
+    let bg = p.background.unwrap_or_default();
+    if bg.motion() == background::Motion::Closeopen && bg.image() == background::Image::None {
+        return Err(Error::Invalid(
+            "background motion CLOSEOPEN has nothing to reveal with image NONE \
+             (its hexagons open onto an image); set image STARFIELD, or motion LIGHTS"
+                .into(),
+        ));
+    }
+    if let Some(overlay::Layer::Matrix(m)) = p.overlay.as_ref().and_then(|o| o.layer.as_ref()) {
+        if !(0.0..=360.0).contains(&m.angle) {
+            return Err(Error::Invalid(format!(
+                "overlay.matrix.angle {} is outside 0-360 \
+                 (0 = falling down, increasing clockwise)",
+                crate::geom::fmt(m.angle)
+            )));
+        }
+        let color = if m.color.is_empty() {
+            MATRIX_COLOR
+        } else {
+            &m.color
+        };
+        hex_rgba(color).map_err(|e| Error::Invalid(format!("overlay.matrix.color: {e}")))?;
+    }
+
+    // Reject a bad resolution at load rather than only when main() reaches it.
+    let check = |s: &str, field: &str| -> Result<(), Error> {
+        parse_res(s)
+            .map(|_| ())
+            .map_err(|e| Error::Invalid(format!("{field}: {e}")))
+    };
+    match p.output.as_ref().and_then(|o| o.sink.as_ref()) {
+        Some(output::Sink::File(f)) => check(&f.resolution, "output.file.resolution")?,
+        Some(output::Sink::Stdout(s)) => check(&s.resolution, "output.stdout.resolution")?,
+        Some(output::Sink::Directory(d)) => {
+            for r in &d.resolutions {
+                check(r, "output.directory.resolutions")?;
+            }
+        }
+        None => {}
+    }
+    Ok(())
+}
+
+/// Empty -> 1080p, else a preset name or WIDTHxHEIGHT.
+///
+/// A zero dimension is rejected here rather than dividing by zero downstream:
+/// the Python raised an uncaught ZeroDivisionError, and Rust would quietly
+/// emit a garbage SVG instead.
+pub fn parse_res(s: &str) -> Result<(u32, u32), Error> {
+    const PRESETS: [(&str, (u32, u32)); 8] = [
+        ("1080p", (1920, 1080)),
+        ("1440p", (2560, 1440)),
+        ("4k", (3840, 2160)),
+        ("720p", (1280, 720)),
+        ("mobile", (1080, 1920)),
+        ("square", (1080, 1080)),
+        ("tablet", (1536, 2048)),
+        ("ultrawide", (3440, 1440)),
+    ];
+    let s = s.trim().to_lowercase();
+    let s = if s.is_empty() { "1080p" } else { &s };
+    if let Some((_, wh)) = PRESETS.iter().find(|(name, _)| *name == s) {
+        return Ok(*wh);
+    }
+    let bad = || {
+        let names: Vec<&str> = PRESETS.iter().map(|(n, _)| *n).collect();
+        Error::Invalid(format!(
+            "bad resolution '{s}': use WIDTHxHEIGHT or a preset {names:?}"
+        ))
+    };
+    let (w, h) = s.split_once('x').ok_or_else(bad)?;
+    let (w, h) = (
+        w.parse::<u32>().map_err(|_| bad())?,
+        h.parse::<u32>().map_err(|_| bad())?,
+    );
+    if w == 0 || h == 0 {
+        return Err(Error::Invalid(format!(
+            "bad resolution '{s}': both dimensions must be non-zero"
+        )));
+    }
+    Ok((w, h))
+}
+
+/// Every config the schema expresses and `validate` keeps, across the four axes
+/// that move the picture. Driven off the enum values, so a new motion or image
+/// joins the sweep without editing this function.
+///
+/// Both test surfaces enumerate from here -- `tests/configs.rs` to assert a
+/// render is well-formed, `test/golden.py` to assert it did not change -- so a
+/// new axis cannot reach one and miss the other. The matrix angle and colour
+/// are deliberately non-default: angle 0 skips the rotation and the default
+/// colour skips the override, so pinning those two would pin nothing.
+pub fn valid_configs(seed: u32) -> Vec<serde_json::Value> {
+    use serde_json::json;
+    let mut out = Vec::new();
+    // These enums are dense, so walking until try_from fails walks declaration
+    // order exactly; a deliberately sparse enum would truncate the sweep.
+    for motion in (0..).map_while(|i| background::Motion::try_from(i).ok()) {
+        for image in (0..).map_while(|i| background::Image::try_from(i).ok()) {
+            if motion == background::Motion::Closeopen && image == background::Image::None {
+                continue; // rejected by validate(), though renderable
+            }
+            for glyph in [
+                json!({"hexatri": {"motion": "ROTATE"}}),
+                json!({"hexatri": {"motion": "STATIC"}}),
+                json!({"ship": {}}),
+            ] {
+                for overlay in [
+                    json!({}),
+                    json!({"matrix": {"angle": 250, "color": "#395e53cc"}}),
+                ] {
+                    out.push(json!({
+                        "seed": seed,
+                        "background": {"motion": motion.as_str_name(), "image": image.as_str_name()},
+                        "icon": glyph,
+                        "overlay": overlay,
+                    }));
+                }
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -54,5 +274,88 @@ mod tests {
                 .motion(),
             background::Motion::Closeopen
         );
+    }
+
+    /// `{}` must land exactly on the old flagless defaults -- `Hexatri.ROTATE`
+    /// being zero is the value that would otherwise flip silently.
+    #[test]
+    fn an_empty_config_resolves_to_the_old_defaults() {
+        let s = resolve(&parse("{}").unwrap());
+        assert_eq!(s.seed, 0);
+        assert_eq!(s.motion, background::Motion::Static);
+        assert_eq!(s.image, background::Image::None);
+        assert_eq!(s.glyph, Glyph::Hexatri { rotate: true });
+        assert!(s.overlay.is_none());
+        assert_eq!(s.slug(), "static-rotate-hexatri-none-none");
+    }
+
+    #[test]
+    fn a_full_config_resolves_every_axis() {
+        let s = resolve(
+            &parse(
+                r##"{"seed":7,"background":{"motion":"CLOSEOPEN","image":"STARFIELD"},
+                    "icon":{"ship":{}},
+                    "overlay":{"matrix":{"angle":250,"color":"#395e53cc"}}}"##,
+            )
+            .unwrap(),
+        );
+        assert_eq!(s.seed, 7);
+        assert_eq!(s.glyph, Glyph::Ship);
+        assert_eq!(s.slug(), "closeopen-static-ship-space-matrix");
+        let rain = s.overlay.unwrap();
+        assert_eq!(rain.angle, 250.0);
+        assert_eq!(rain.color, "#395e53cc");
+
+        // an unset colour falls back to the in-palette default
+        let s = resolve(&parse(r#"{"overlay":{"matrix":{"angle":0}}}"#).unwrap());
+        assert_eq!(s.overlay.unwrap().color, crate::style::MATRIX_COLOR);
+    }
+
+    /// The rules parameters.proto cannot state.
+    #[test]
+    fn validate_rejects_what_the_schema_cannot() {
+        for bad in [
+            r#"{"background":{"motion":"CLOSEOPEN","image":"NONE"}}"#,
+            r#"{"overlay":{"matrix":{"angle":400}}}"#,
+            r#"{"overlay":{"matrix":{"angle":-1}}}"#,
+            r#"{"overlay":{"matrix":{"color":"395e53"}}}"#,
+            r#"{"output":{"directory":{"resolutions":["1080"]}}}"#,
+            r#"{"output":{"stdout":{"resolution":"0x0"}}}"#,
+        ] {
+            assert!(validate(&parse(bad).unwrap()).is_err(), "accepted {bad}");
+        }
+        assert!(
+            validate(
+                &parse(r#"{"background":{"motion":"CLOSEOPEN","image":"STARFIELD"}}"#).unwrap()
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn parse_res_takes_presets_and_dimensions() {
+        assert_eq!(parse_res("").unwrap(), (1920, 1080));
+        assert_eq!(parse_res("4K").unwrap(), (3840, 2160));
+        assert_eq!(parse_res(" 1280x720 ").unwrap(), (1280, 720));
+        for bad in ["1080", "1280x", "x720", "1280 x 720", "0x0", "1920x0"] {
+            assert!(parse_res(bad).is_err(), "accepted {bad}");
+        }
+    }
+
+    /// Both test surfaces enumerate from here, so a new enum value cannot reach
+    /// one and miss the other. The bytes are the corpus's filenames.
+    #[test]
+    fn valid_configs_are_the_corpus() {
+        let cfgs = valid_configs(0);
+        assert_eq!(cfgs.len(), 42);
+        assert_eq!(
+            serde_json::to_string(&cfgs[0]).unwrap(),
+            r#"{"background":{"image":"NONE","motion":"STATIC"},"icon":{"hexatri":{"motion":"ROTATE"}},"overlay":{},"seed":0}"#
+        );
+        for c in &cfgs {
+            let text = serde_json::to_string(c).unwrap();
+            let p = parse(&text).unwrap_or_else(|e| panic!("{text}: {e}"));
+            validate(&p).unwrap_or_else(|e| panic!("{text}: {e}"));
+        }
     }
 }
