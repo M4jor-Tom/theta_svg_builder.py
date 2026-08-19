@@ -174,8 +174,13 @@ pub fn parse_res(s: &str) -> Result<(u32, u32), Error> {
         ("tablet", (1536, 2048)),
         ("ultrawide", (3440, 1440)),
     ];
+    // The empty-string fallback is decided on the *raw* input, before
+    // trimming -- `background.py:677`'s `(s or "1080p").strip().lower()`
+    // rejects a whitespace-only string (it strips to "" after the `or`
+    // check already passed), and this must too.
+    let s = if s.is_empty() { "1080p" } else { s };
     let s = s.trim().to_lowercase();
-    let s = if s.is_empty() { "1080p" } else { &s };
+    let s = s.as_str();
     if let Some((_, wh)) = PRESETS.iter().find(|(name, _)| *name == s) {
         return Ok(*wh);
     }
@@ -309,6 +314,11 @@ mod tests {
         // an unset colour falls back to the in-palette default
         let s = resolve(&parse(r#"{"overlay":{"matrix":{"angle":0}}}"#).unwrap());
         assert_eq!(s.overlay.unwrap().color, crate::style::MATRIX_COLOR);
+
+        // STATIC must resolve to rotate:false, not just ROTATE to rotate:true --
+        // a swapped `==`/variant here would type-check and pass every other test.
+        let s = resolve(&parse(r#"{"icon":{"hexatri":{"motion":"STATIC"}}}"#).unwrap());
+        assert_eq!(s.glyph, Glyph::Hexatri { rotate: false });
     }
 
     /// The rules parameters.proto cannot state.
@@ -334,10 +344,12 @@ mod tests {
 
     #[test]
     fn parse_res_takes_presets_and_dimensions() {
-        assert_eq!(parse_res("").unwrap(), (1920, 1080));
+        assert_eq!(parse_res("").unwrap(), (1920, 1080)); // "" still defaults to 1080p
         assert_eq!(parse_res("4K").unwrap(), (3840, 2160));
         assert_eq!(parse_res(" 1280x720 ").unwrap(), (1280, 720));
-        for bad in ["1080", "1280x", "x720", "1280 x 720", "0x0", "1920x0"] {
+        // a whitespace-only string is not empty, so it must NOT default -- it
+        // strips to "" and is then rejected, same as background.py:677.
+        for bad in ["1080", "1280x", "x720", "1280 x 720", "0x0", "1920x0", " "] {
             assert!(parse_res(bad).is_err(), "accepted {bad}");
         }
     }
