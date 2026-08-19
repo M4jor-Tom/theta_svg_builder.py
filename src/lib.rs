@@ -3,8 +3,10 @@
 //! (Task 12 replaces this placeholder with the full module docstring ported
 //! from background.py:1-52.)
 
+pub mod geom;
 pub mod params;
 pub mod rng;
+pub mod style;
 
 use std::fmt;
 
