@@ -2,17 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-`svg_builder` generates a **self-contained, CSS-animated SVG** wallpaper (a hexagon lattice with sparse triangles + a center icon). Everything is one Python file, **stdlib only**, no external assets — even the "space" starfield is drawn as SVG primitives, so output stays small and crisp at any resolution.
+`svg_builder` generates a **self-contained, CSS-animated SVG** wallpaper (a hexagon lattice with sparse triangles + a center icon). Everything is one Python file plus a generated protobuf module, no external assets — even the "space" starfield is drawn as SVG primitives, so output stays small and crisp at any resolution.
 
 ## Commands
 
 ```sh
-nix run .#bgsvg -- --bg lights --fg rotate --resolution 4k --out wall.svg
-nix run .#bgsvg -- --list            # every axis + presets
-python3 background.py --selftest     # the test suite — run after ANY change
-nix build                            # default package = bgsvg
+nix run .#bgsvg                       # renders ./parameters.json
+nix run .#bgsvg -- path/to/config.json
+python3 background.py --selftest      # the test suite — run after ANY change
+nix build                             # default package = bgsvg
+nix develop -c protoc --python_out=. parameters.proto   # regenerate _pb2
 ```
-Without Nix, `background.py` runs on plain Python 3 (`python3 background.py …`).
+Without Nix, `background.py` runs on any Python 3 with `protobuf` installed.
 
 `--selftest` is the only test: it builds all 64 `bg × fg × icon × bg-image × overlay` combinations, parses each as XML, and asserts the invariants below (`selftest`/`_assert_*` in `background.py`). Treat a change as unfinished until it passes.
 
@@ -20,7 +21,17 @@ Without Nix, `background.py` runs on plain Python 3 (`python3 background.py …`
 
 `background.py` is the whole program; `flake.nix` just wraps it as the `bgsvg` app. Read `docs/mood/` (README + `matrix.png` + `samples/`) before touching anything visual — it is the graphic-mood contract, and the point is to extend the look without breaking it.
 
-**Five independent axes, combined freely** — `--bg` (`static`/`scan`/`lights`/`closeopen`), `--fg` (`rotate`/`static`), `--icon` (`hexatri`/`ship`), `--bg-image` (`none`/`space`), `--overlay` (`none`/`matrix`). Three combinations are **rejected with an error, not silently ignored**: `--icon ship --fg rotate` (the ship is static by design), `--bg closeopen --bg-image none` (closeopen has nothing to reveal), and `--matrix-angle`/`--matrix-color` without `--overlay matrix` (nothing to steer). Preserve that "reject, don't ignore" stance for new incompatibilities.
+**One config, one render** — `parameters.json` is the whole input and
+`parameters.proto` is its schema; `--selftest` and the config path are the
+only CLI surface left. **Conditional rules are structural where the model
+allows it, and rejected where it does not.** A motion belongs to the icon that
+declares it (`Hexatri.Motion`; `Ship` declares none, and nothing assumes the
+next glyph rotates), and the matrix angle and colour live inside `Matrix` — so
+both are unwritable rather than rejected. `Background` keeps `motion` and
+`image` as orthogonal enums, matching the parameters `pat_trihex` takes, which
+leaves `CLOSEOPEN` + `NONE` expressible; `validate()` rejects it, along with
+the angle range, the colour format and the resolution format. When adding a
+rule, try moving a field before adding a check.
 
 **Determinism** — geometry depends ONLY on `--seed`; the animation/icon/image/overlay choices never move a hexagon. Same seed ⇒ same layout across every combination. `pat_matrix` gets its own `random.Random` for exactly this reason, and `_assert_matrix` compares every `<polygon>` overlay-on vs overlay-off. Keep new features on this rule so seeds stay stable.
 

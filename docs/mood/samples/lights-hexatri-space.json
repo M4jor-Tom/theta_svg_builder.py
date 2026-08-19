@@ -1,0 +1,3 @@
+{"output": {"file": {"path": "docs/mood/samples/lights-hexatri-space.svg", "resolution": "1280x720"}},
+ "background": {"motion": "LIGHTS", "image": "STARFIELD"},
+ "icon": {"hexatri": {}}}

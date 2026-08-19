@@ -1,0 +1,4 @@
+{"output": {"file": {"path": "docs/mood/samples/matrix-hexatri.svg", "resolution": "1280x720"}},
+ "background": {"motion": "STATIC"},
+ "icon": {"hexatri": {}},
+ "overlay": {"matrix": {"angle": 250}}}

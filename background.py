@@ -2,53 +2,53 @@
 """Animated SVG background builder — trihexagonal blueprint.
 
 A hexagon lattice with sparse equilateral triangles, plus a center icon.
-Light theme only. The four axes below are independent and combine freely:
+Light theme only. One render is described by one JSON file; parameters.proto
+is its schema, and every zero value there is this program's default, so `{}`
+is a complete config.
 
-  --bg static         no background animation
-  --bg scan           hexagon (and triangle) opacities sweep diagonally
-  --bg lights         hexagons occasionally light their border, then fill, then rest
-  --bg closeopen      every hexagon is a window, mostly shut; a few shrink open
-                      onto the image at a time, then close again
-  --fg rotate         the hexatri icon's triangle rings counter-rotate
-  --fg static         still icon
-  --icon hexatri      nested hexagon/triangle glyph
-  --icon ship         cloaked delta spaceship: one folded sheet read as four
-                      translucent facets under one light (always static)
-  --bg-image none     plain lattice
-  --bg-image space    a few hexagons become windows onto a procedural starfield
-  --overlay none      nothing above the lattice
-  --overlay matrix    columns of characters at --matrix-angle in --matrix-color.
-                      The characters never move: a lit head walks down each
-                      column into the next fixed glyph while the ones behind it
-                      fade out in place
+  background.motion  STATIC     no background animation
+                     SCAN       hexagon (and triangle) opacities sweep diagonally
+                     LIGHTS     hexagons light their border, then fill, then rest
+                     CLOSEOPEN  every hexagon is a window, mostly shut; a few
+                                shrink open onto the image at a time, then close
+  background.image   NONE       plain lattice
+                     STARFIELD  a few hexagons become windows onto a procedural
+                                starfield
+  icon.hexatri       nested hexagon/triangle glyph, motion ROTATE or STATIC
+  icon.ship          cloaked delta spaceship: one folded sheet read as four
+                     translucent facets under one light. Declares no motion --
+                     it is static by design, and nothing assumes the next glyph
+                     rotates
+  overlay.matrix     columns of characters at `angle` in `color`. The characters
+                     never move: a lit head walks down each column into the next
+                     fixed glyph while the ones behind it fade out in place
+
+Two rules that used to be runtime rejections are now unrepresentable: a motion
+belongs to the icon that has it (only hexatri declares one), and the matrix
+angle and colour live inside the matrix message, so they cannot be written
+without rain to steer. The one rule the schema cannot state -- CLOSEOPEN needs
+an image to open onto -- is checked in validate().
 
 Animation is pure CSS (no SMIL, no JS) and honours prefers-reduced-motion
-(which falls back to the clean static look). Stdlib only, no external assets:
-the starfield is drawn, not embedded, so output stays a small self-contained
-.svg that is crisp at any resolution. Sizes scale with min(w,h) so pattern
-density is constant across resolutions.
+(which falls back to the clean static look). protobuf is the only dependency
+and there are no external assets: the starfield is drawn, not embedded, so
+output stays a small self-contained .svg that is crisp at any resolution.
+Sizes scale with min(w,h) so pattern density is constant across resolutions.
 
 Triangle logic: every hexagon is EITHER a "holder" (one of its edges is a
 triangle's base) OR an "intersector" (a triangle's tip pokes into it), never
 both. Triangles never overlap and never sit behind the center icon.
 
-Space cells sit fully outside the icon's clear zone, and under --bg lights
-they pulse their border only -- a pale fill flash would wash the stars out.
+Space cells sit fully outside the icon's clear zone, and under LIGHTS they
+pulse their border only -- a pale fill flash would wash the stars out.
 
-Three cross-axis rules, all rejected rather than silently ignored: --fg rotate
-applies to --icon hexatri only (the ship is static by design, so --icon ship
-resolves --fg to static), --bg closeopen needs a --bg-image to open onto, and
---matrix-angle / --matrix-color need --overlay matrix to steer.
-
-Everything except the animations depends only on --seed, so a given seed
-yields the same layout across every bg / fg / icon / bg-image / overlay
-combination -- the rain draws from its own stream and never moves a hexagon.
+Everything except the animations depends only on `seed`, so a given seed
+yields the same layout across every background / icon / overlay combination --
+the rain draws from its own stream and never moves a hexagon.
 
 Examples:
-  bgsvg --bg lights --fg rotate --resolution 4k --out a.svg
-  bgsvg --bg closeopen --bg-image space --resolution 2560x1440 --out b.svg
-  bgsvg --overlay matrix --matrix-angle 250 --matrix-color '#395e53cc'
-  bgsvg --bg static --resolution mobile,1080p            # -> ./out/*.svg
+  bgsvg                      # ./parameters.json
+  bgsvg docs/mood/samples/matrix-hexatri.json
 """
 import argparse
 import collections
@@ -68,12 +68,6 @@ PRESETS = {
     "4k": (3840, 2160), "mobile": (1080, 1920), "tablet": (1536, 2048),
     "square": (1080, 1080), "ultrawide": (3440, 1440),
 }
-
-BG = ("static", "scan", "lights", "closeopen")
-FG = ("rotate", "static")
-ICON = ("hexatri", "ship")
-BG_IMAGE = ("none", "space")
-OVERLAY = ("none", "matrix")
 
 SQRT3 = math.sqrt(3)
 

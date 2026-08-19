@@ -1,0 +1,3 @@
+{"output": {"file": {"path": "docs/mood/samples/scan-ship-space.svg", "resolution": "1280x720"}},
+ "background": {"motion": "SCAN", "image": "STARFIELD"},
+ "icon": {"ship": {}}}

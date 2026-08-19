@@ -79,7 +79,7 @@ different design; keeping it in the blue-slate family makes it a window.
   shape is now the folded ridge rather than a second outline (see below), but the
   rule it satisfies is unchanged.
 
-## The cloaked ship (`--icon ship`)
+## The cloaked ship (`icon.ship`)
 
 The one glyph that is a *solid* rather than linework: a sheet folded along its
 spine, read as four facets — lit wing, lit ridge face, shadowed ridge face,
@@ -105,28 +105,29 @@ fading aft. On a high-key page a highlight cannot out-light the paper, so it rea
 only where it lies over the shadowed ridge face: light added by *removing tint*,
 the same inversion the rain's head uses. Rule 4 in a third costume.
 
-## Space cells (`--bg-image space`)
+## Space cells (`background.image STARFIELD`)
 
 Windows onto the void, at ~8% of eligible hexagons. Sparse is the point: a few
 portals, not a checkerboard. Each is a clipped void ground, one faint nebula
 ellipse, and ~18 seeded stars with two bloomed anchors — drawn, never embedded,
 so there are no assets and it stays crisp at 4k.
 
-The ~8% applies to `--bg static`, `scan` and `lights`. Under `--bg closeopen`
-every eligible hexagon is a window and the blinds keep all but a few shut — same
-sparseness, enforced in time instead (see below).
+The ~8% applies to `background.motion STATIC`, `SCAN` and `LIGHTS`. Under
+`background.motion CLOSEOPEN` every eligible hexagon is a window and the
+blinds keep all but a few shut — same sparseness, enforced in time instead
+(see below).
 
 Two constraints exist for mood reasons, not technical ones:
 
 - A cell must clear the icon zone **entirely** (centre distance ≥ `clear_r + s`),
   the same exclusion triangles obey.
-- Under `--bg lights` a cell pulses its **border only** (`.lightb`). The normal
+- Under `background.motion LIGHTS` a cell pulses its **border only** (`.lightb`). The normal
   pale fill flash would wash the starfield out.
 
 Triangles are allowed to cross a space cell. They are translucent, so they read
 as shards catching light — this is intentional, not an oversight.
 
-## Blinds (`--bg closeopen`)
+## Blinds (`background.motion CLOSEOPEN`)
 
 A canvas-filled hexagon over each window, scaling about its own centre: closed at
 `scale(1)`, open at `scale(0)`. It reveals from the border inward, which keeps
@@ -198,10 +199,10 @@ Three more things this depends on, all easy to break:
   the motion, never the picture.
 
 
-## Character rain (`--overlay matrix`)
+## Character rain (`overlay.matrix`)
 
-Columns of characters at `--matrix-angle` (0–360, `0` = downward, increasing
-clockwise) in `--matrix-color` (`#rrggbb` or `#rrggbbaa`).
+Columns of characters at `overlay.matrix.angle` (0–360, `0` = downward, increasing
+clockwise) in `overlay.matrix.color` (`#rrggbb` or `#rrggbbaa`).
 
 **The characters do not move.** Every cell of a column holds one glyph, chosen once
 at generation and fixed for good; what travels is the *lighting*. A head flares at
@@ -254,12 +255,7 @@ add a second focal point.
 ## Regenerating
 
 ```sh
-python3 background.py --bg static    --icon hexatri                  -r 1280x720 -o docs/mood/samples/static-hexatri.svg
-python3 background.py --bg static    --icon ship                     -r 1280x720 -o docs/mood/samples/static-ship.svg
-python3 background.py --bg lights    --icon hexatri --bg-image space -r 1280x720 -o docs/mood/samples/lights-hexatri-space.svg
-python3 background.py --bg scan      --icon ship    --bg-image space -r 1280x720 -o docs/mood/samples/scan-ship-space.svg
-python3 background.py --bg closeopen --icon hexatri --bg-image space -r 1280x720 -o docs/mood/samples/closeopen-hexatri-space.svg
-python3 background.py --bg static    --overlay matrix --matrix-angle 250   -r 1280x720 -o docs/mood/samples/matrix-hexatri.svg
+for f in docs/mood/samples/*.json; do python3 background.py "$f"; done
 ```
 
 The `.svg` files in `samples/` are the live artifacts — open them in a browser to
