@@ -732,36 +732,50 @@ def main(argv=None):
         return 2
 
 
-def selftest():
-    from xml.dom.minidom import parseString
-    n = 0
+def valid_configs(seed=0):
+    """Every config the schema expresses and validate() keeps, across the four
+    axes that move the picture. Driven off the enum keys, so a new motion or
+    image joins the sweep without editing this function.
+
+    Both test surfaces enumerate from here -- selftest() to assert a render is
+    well-formed, test/golden.py to assert it did not change -- so a new axis
+    cannot reach one and miss the other. The matrix angle and colour are
+    deliberately non-default: angle 0 skips the rotation and the default colour
+    skips the override, so pinning those two would pin nothing.
+    """
     for motion in pb.Background.Motion.keys():
         for image in pb.Background.Image.keys():
             if motion == "CLOSEOPEN" and image == "NONE":
-                continue                      # rejected below, though renderable
+                continue                      # rejected by validate(), though renderable
             for glyph in ({"hexatri": {"motion": "ROTATE"}},
                           {"hexatri": {"motion": "STATIC"}},
                           {"ship": {}}):
                 for overlay in ({}, {"matrix": {"angle": 250, "color": "#395e53cc"}}):
-                    kw = resolve(validate(parse({
-                        "seed": 1,
-                        "background": {"motion": motion, "image": image},
-                        "icon": glyph,
-                        "overlay": overlay})))
-                    svg = build_svg(640, 360, **kw)
-                    parseString(svg)
-                    assert svg.startswith("<svg") and "prefers-reduced-motion" in svg
-                    assert ("<line x1=" in svg) == (kw["icon"] == "ship"), \
-                        "icon dispatch is wrong"
-                    assert ("url(#shp" in svg) == (kw["icon"] == "ship"), \
-                        "ship facets leaked across icons"
-                    assert ("<clipPath" in svg) == (kw["bg_image"] == "space"), \
-                        "bg-image dispatch is wrong"
-                    assert ('class="blind"' in svg) == (kw["bg"] == "closeopen"), \
-                        "blinds must exist exactly when closeopen has windows to cover"
-                    assert ('class="rain"' in svg) == (kw["overlay"] == "matrix"), \
-                        "overlay dispatch is wrong"
-                    n += 1
+                    yield {"seed": seed,
+                           "background": {"motion": motion, "image": image},
+                           "icon": glyph,
+                           "overlay": overlay}
+
+
+def selftest():
+    from xml.dom.minidom import parseString
+    n = 0
+    for cfg in valid_configs(seed=1):
+        kw = resolve(validate(parse(cfg)))
+        svg = build_svg(640, 360, **kw)
+        parseString(svg)
+        assert svg.startswith("<svg") and "prefers-reduced-motion" in svg
+        assert ("<line x1=" in svg) == (kw["icon"] == "ship"), \
+            "icon dispatch is wrong"
+        assert ("url(#shp" in svg) == (kw["icon"] == "ship"), \
+            "ship facets leaked across icons"
+        assert ("<clipPath" in svg) == (kw["bg_image"] == "space"), \
+            "bg-image dispatch is wrong"
+        assert ('class="blind"' in svg) == (kw["bg"] == "closeopen"), \
+            "blinds must exist exactly when closeopen has windows to cover"
+        assert ('class="rain"' in svg) == (kw["overlay"] == "matrix"), \
+            "overlay dispatch is wrong"
+        n += 1
     _assert_constraints(1920, 1080)
     _assert_constraints(1080, 1920)
     _assert_space(1920, 1080)

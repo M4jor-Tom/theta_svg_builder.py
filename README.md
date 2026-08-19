@@ -91,7 +91,8 @@ the icon).
 ```sh
 nix run .#bgsvg                       # renders ./parameters.json
 nix run .#bgsvg -- path/to/config.json
-python3 background.py --selftest      # the only test
+python3 background.py --selftest      # invariants
+python3 test/golden.py                # the picture did not change
 ```
 
 Without Nix, `background.py` runs on any Python 3 with `protobuf >= 7.35.1` installed
@@ -152,3 +153,40 @@ an empty config renders the old defaults. It also asserts that the schema or
 sinks at once, a typo'd key, `background.motion CLOSEOPEN` without an image,
 an out-of-range matrix angle, a malformed colour, a malformed resolution,
 malformed JSON, and a missing config file.
+
+```sh
+python3 test/golden.py            # verify
+python3 test/golden.py --regen    # rewrite after an intended visual change
+```
+
+`--selftest` says a render is *well-formed*; the golden corpus says it is
+*unchanged*. `test/golden/` holds those same 42 configs, each kept beside the
+SVG it renders:
+
+```
+test/golden/<sha512 of the SVG>/<sha512 of the JSON>_parameters.json
+                               /<sha512 of the SVG>_background.svg
+```
+
+One rule covers both files: each is named by the sha512 of its own bytes,
+exactly as written. So `sha512sum` reproduces every name in the corpus, and
+nothing has to trust this program to check its own work:
+
+```sh
+sha512sum test/golden/<D>/*                             # -> <F>, <D>
+nix run .#bgsvg -- test/golden/<D>/<F>_parameters.json
+sha512sum out/trihex-*.svg                              # -> D
+```
+
+Keeping the SVG rather than only its hash is what lets a failure say *what*
+moved — it reports the first differing byte with the text either side, since a
+line diff says nothing about a one-line document. The corpus is 4.2 MB, about
+0.6 MB compressed.
+
+The goldens fix `seed` at `0` and carry no `output`, because geometry depends
+only on the seed and the sink picks a destination, not pixels; `test/golden.py`
+renders them at 1080p. A directory sink with several resolutions is one config
+with several SVGs, which this layout cannot name, so the corpus holds
+single-render configs only. Two configs in one directory would mean they render
+byte-identical SVGs — an axis that stopped changing the picture — and `scan()`
+reports it.

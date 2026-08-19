@@ -9,14 +9,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```sh
 nix run .#bgsvg                       # renders ./parameters.json
 nix run .#bgsvg -- path/to/config.json
-python3 background.py --selftest      # the test suite — run after ANY change
+python3 background.py --selftest      # invariants — run after ANY change
+python3 test/golden.py                # the picture did not change (--regen when it should have)
 nix build                             # default package = bgsvg
 nix develop -c protoc --python_out=. parameters.proto   # regenerate _pb2
 ```
 Without Nix, `background.py` runs on any Python 3 with `protobuf >= 7.35.1` installed
 (the generated `parameters_pb2.py` refuses to import against an older runtime).
 
-`--selftest` is the only test: it builds all 42 valid `background.motion` × `background.image` × `icon` × `overlay` combinations, parses each as XML, and asserts the invariants below (`selftest`/`_assert_*` in `background.py`). Treat a change as unfinished until it passes.
+Two tests, and a change is unfinished until both pass. `--selftest` builds all 42 valid `background.motion` × `background.image` × `icon` × `overlay` combinations, parses each as XML, and asserts the invariants below (`selftest`/`_assert_*` in `background.py`) — it says a render is *well-formed*. `test/golden.py` says it is *unchanged*: the same 42 configs live in `test/golden/<sha512 of the SVG>/`, each beside the `<sha512 of the SVG>_background.svg` it renders. One rule covers both files — each is named by the sha512 of its own bytes, exactly as written — so `sha512sum` reproduces every name unaided. The SVG is kept, not just its hash, so a failure reports the first differing byte instead of only a moved hash. Both enumerate from `valid_configs()` rather than each carrying its own loop, so a new axis cannot reach one surface and miss the other — add an enum value and both sweeps grow. It fails on any byte that moves, so run `--regen` when the picture was **meant** to move, and read the diff first — a golden change you did not intend is the regression.
 
 ## Architecture
 
