@@ -218,7 +218,7 @@ exercises the path users actually run. Assertions simplify as a side effect:
 `('class="blind"' in svg) == (bg == "closeopen" and img == "space")` loses its
 second clause, since the enumeration never yields a blind without windows.
 
-`_assert_rejected` (:741) changes shape and grows from six cases to nine:
+`_assert_rejected` (:741) changes shape and grows from six cases to ten:
 
 | case | rejected by |
 |---|---|
@@ -227,6 +227,7 @@ second clause, since the enumeration never yields a blind without windows.
 | `motion: CLOSEOPEN` + `image: NONE` | Python check |
 | angle `400` | Python check |
 | colour `395e53` | Python check |
+| resolution `1080` | Python check (`parse_res`) |
 | unknown key (`"backgrond"`) | `ignore_unknown_fields=False` |
 | two `oneof` members set at once | schema (`ParseError`) |
 | malformed JSON | `json.load` |
