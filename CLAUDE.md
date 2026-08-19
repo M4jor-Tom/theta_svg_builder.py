@@ -13,7 +13,8 @@ python3 background.py --selftest      # the test suite — run after ANY change
 nix build                             # default package = bgsvg
 nix develop -c protoc --python_out=. parameters.proto   # regenerate _pb2
 ```
-Without Nix, `background.py` runs on any Python 3 with `protobuf` installed.
+Without Nix, `background.py` runs on any Python 3 with `protobuf >= 7.35.1` installed
+(the generated `parameters_pb2.py` refuses to import against an older runtime).
 
 `--selftest` is the only test: it builds all 42 valid `background.motion` × `background.image` × `icon` × `overlay` combinations, parses each as XML, and asserts the invariants below (`selftest`/`_assert_*` in `background.py`). Treat a change as unfinished until it passes.
 

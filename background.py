@@ -595,6 +595,14 @@ def build_svg(w, h, bg="static", fg="rotate", icon="hexatri", bg_image="none", s
 
 
 # ---- config ---------------------------------------------------------------
+# Total lookups, not ".name.lower()" with an "else" fallback: a schema value
+# the renderer has no token for must be a loud KeyError, not a silently wrong
+# picture. Keep these the only two vocabularies resolve() has to bridge.
+_BG = {pb.Background.Motion.STATIC: "static", pb.Background.Motion.SCAN: "scan",
+       pb.Background.Motion.LIGHTS: "lights", pb.Background.Motion.CLOSEOPEN: "closeopen"}
+_IMG = {pb.Background.Image.NONE: "none", pb.Background.Image.STARFIELD: "space"}
+
+
 def parse(obj):
     """dict -> Parameters. Rejecting a typo'd key, a value of the wrong type and
     two members of one oneof is the schema's job, so none of it is re-checked
@@ -606,6 +614,15 @@ def validate(p):
     """The rules parameters.proto cannot state. Everything else is structural --
     if a new rule can be expressed by moving a field, move the field instead of
     adding a check here."""
+    def check_res(s, field):
+        # Reuses parse_res -- main() still calls it again for the actual sizes,
+        # and that second call cannot fail -- so load() rejects a bad string
+        # instead of only main() being a fully-validating entry point.
+        try:
+            parse_res(s)
+        except ValueError as e:
+            raise ValueError(f"{field}: {e}") from None
+
     if (p.background.motion == pb.Background.Motion.CLOSEOPEN
             and p.background.image == pb.Background.Image.NONE):
         raise ValueError("background motion CLOSEOPEN has nothing to reveal with "
@@ -613,9 +630,21 @@ def validate(p):
                          "STARFIELD, or motion LIGHTS")
     if p.overlay.WhichOneof("layer") == "matrix":
         if not 0 <= p.overlay.matrix.angle <= 360:
-            raise ValueError(f"overlay matrix angle {fmt(p.overlay.matrix.angle)} is "
+            raise ValueError(f"overlay.matrix.angle {fmt(p.overlay.matrix.angle)} is "
                              "outside 0-360 (0 = falling down, increasing clockwise)")
-        hex_rgba(p.overlay.matrix.color or MATRIX_COLOR)
+        try:
+            hex_rgba(p.overlay.matrix.color or MATRIX_COLOR)
+        except ValueError as e:
+            raise ValueError(f"overlay.matrix.color: {e}") from None
+
+    sink = p.output.WhichOneof("sink")
+    if sink == "file":
+        check_res(p.output.file.resolution, "output.file.resolution")
+    elif sink == "stdout":
+        check_res(p.output.stdout.resolution, "output.stdout.resolution")
+    else:
+        for r in p.output.directory.resolutions:
+            check_res(r, "output.directory.resolutions")
     return p
 
 
@@ -630,12 +659,11 @@ def resolve(p):
     vocabulary, and this is the only place the two meet."""
     glyph = p.icon.WhichOneof("glyph") or "hexatri"
     return dict(
-        bg=pb.Background.Motion.Name(p.background.motion).lower(),
-        fg=("static" if glyph == "ship"
-            else pb.Hexatri.Motion.Name(p.icon.hexatri.motion).lower()),
+        bg=_BG[p.background.motion],
+        fg=(pb.Hexatri.Motion.Name(p.icon.hexatri.motion).lower()
+            if glyph == "hexatri" else "static"),
         icon=glyph,
-        bg_image=("space" if p.background.image == pb.Background.Image.STARFIELD
-                  else "none"),
+        bg_image=_IMG[p.background.image],
         seed=p.seed,
         overlay=p.overlay.WhichOneof("layer") or "none",
         matrix_angle=p.overlay.matrix.angle,
@@ -675,40 +703,42 @@ def main(argv=None):
             sizes = [parse_res(out.file.resolution)]
         else:
             sizes = [parse_res(r) for r in out.directory.resolutions] or [parse_res("")]
-    except (OSError, ValueError, json_format.ParseError) as e:
+
+        kw = resolve(params)
+        if sink == "stdout":
+            sys.stdout.write(build_svg(*sizes[0], **kw))
+            return 0
+        if sink == "file":
+            with open(out.file.path, "w") as f:
+                f.write(build_svg(*sizes[0], **kw))
+            print(out.file.path)
+            return 0
+
+        outdir = out.directory.path or "out"
+        os.makedirs(outdir, exist_ok=True)
+        for w, h in sizes:  # every axis, always, in schema order -- no optional parts
+            path = os.path.join(
+                outdir,
+                f"trihex-{kw['bg']}-{kw['fg']}-{kw['icon']}-{kw['bg_image']}-"
+                f"{kw['overlay']}-{w}x{h}.svg")
+            with open(path, "w") as f:
+                f.write(build_svg(w, h, **kw))
+            print(path)
+        return 0
+    except (OSError, ValueError, TypeError, json_format.ParseError) as e:
+        # TypeError catches a non-dict JSON root (null/number/bool): ParseDict
+        # iterates it as a mapping and that's the exception it raises.
         print(f"{args.config}: {e}", file=sys.stderr)
         return 2
-
-    kw = resolve(params)
-    if sink == "stdout":
-        sys.stdout.write(build_svg(*sizes[0], **kw))
-        return 0
-    if sink == "file":
-        with open(out.file.path, "w") as f:
-            f.write(build_svg(*sizes[0], **kw))
-        print(out.file.path)
-        return 0
-
-    outdir = out.directory.path or "out"
-    os.makedirs(outdir, exist_ok=True)
-    for w, h in sizes:   # every axis, always, in schema order -- no optional parts
-        path = os.path.join(
-            outdir,
-            f"trihex-{kw['bg']}-{kw['fg']}-{kw['icon']}-{kw['bg_image']}-"
-            f"{kw['overlay']}-{w}x{h}.svg")
-        with open(path, "w") as f:
-            f.write(build_svg(w, h, **kw))
-        print(path)
-    return 0
 
 
 def selftest():
     from xml.dom.minidom import parseString
     n = 0
-    for motion in ("STATIC", "SCAN", "LIGHTS", "CLOSEOPEN"):
-        for image in ("NONE", "STARFIELD"):
+    for motion in pb.Background.Motion.keys():
+        for image in pb.Background.Image.keys():
             if motion == "CLOSEOPEN" and image == "NONE":
-                continue                      # rejected below, not renderable
+                continue                      # rejected below, though renderable
             for glyph in ({"hexatri": {"motion": "ROTATE"}},
                           {"hexatri": {"motion": "STATIC"}},
                           {"ship": {}}):
@@ -803,6 +833,22 @@ def _assert_config():
         try:
             validate(parse(bad))
         except ValueError:
+            pass
+        else:
+            raise AssertionError(why)
+
+    # These two are rejected by the schema itself, not by validate() -- pin
+    # ParseError specifically so the claim proven is "unrepresentable", not
+    # merely "rejected somehow" (which the typo test already covers).
+    for bad, why in (
+        ({"icon": {"ship": {"motion": "ROTATE"}}},
+         "the ship must not accept a motion"),
+        ({"overlay": {"angle": 90}},
+         "matrix knobs outside matrix must be rejected"),
+    ):
+        try:
+            parse(bad)
+        except json_format.ParseError:
             pass
         else:
             raise AssertionError(why)

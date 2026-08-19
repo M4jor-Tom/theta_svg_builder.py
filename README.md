@@ -94,7 +94,8 @@ nix run .#bgsvg -- path/to/config.json
 python3 background.py --selftest      # the only test
 ```
 
-Without Nix, `background.py` runs on any Python 3 with `protobuf` installed.
+Without Nix, `background.py` runs on any Python 3 with `protobuf >= 7.35.1` installed
+(the generated `parameters_pb2.py` refuses to import against an older runtime).
 
 ## Configuration
 
