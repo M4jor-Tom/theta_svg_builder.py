@@ -52,11 +52,16 @@ Examples:
 """
 import argparse
 import collections
+import json
 import math
 import os
 import random
 import re
 import sys
+
+from google.protobuf import json_format
+
+import parameters_pb2 as pb
 
 PRESETS = {
     "720p": (1280, 720), "1080p": (1920, 1080), "1440p": (2560, 1440),
@@ -595,6 +600,55 @@ def build_svg(w, h, bg="static", fg="rotate", icon="hexatri", bg_image="none", s
         f'<rect width="{fmt(w)}" height="{fmt(h)}" fill="url(#vig)"/>{icon_svg}</svg>\n')
 
 
+# ---- config ---------------------------------------------------------------
+def parse(obj):
+    """dict -> Parameters. Rejecting a typo'd key, a value of the wrong type and
+    two members of one oneof is the schema's job, so none of it is re-checked
+    here: ParseDict refuses unknown fields unless told otherwise."""
+    return json_format.ParseDict(obj, pb.Parameters())
+
+
+def validate(p):
+    """The rules parameters.proto cannot state. Everything else is structural --
+    if a new rule can be expressed by moving a field, move the field instead of
+    adding a check here."""
+    if (p.background.motion == pb.Background.Motion.CLOSEOPEN
+            and p.background.image == pb.Background.Image.NONE):
+        raise ValueError("background motion CLOSEOPEN has nothing to reveal with "
+                         "image NONE (its hexagons open onto an image); set image "
+                         "STARFIELD, or motion LIGHTS")
+    if p.overlay.WhichOneof("layer") == "matrix":
+        if not 0 <= p.overlay.matrix.angle <= 360:
+            raise ValueError(f"overlay matrix angle {fmt(p.overlay.matrix.angle)} is "
+                             "outside 0-360 (0 = falling down, increasing clockwise)")
+        hex_rgba(p.overlay.matrix.color or MATRIX_COLOR)
+    return p
+
+
+def load(path):
+    with open(path) as f:
+        return validate(parse(json.load(f)))
+
+
+def resolve(p):
+    """Flatten the message into the values build_svg already takes. The message
+    is a boundary format; bg/fg/icon/bg_image/overlay stay the renderer's own
+    vocabulary, and this is the only place the two meet."""
+    glyph = p.icon.WhichOneof("glyph") or "hexatri"
+    return dict(
+        bg=pb.Background.Motion.Name(p.background.motion).lower(),
+        fg=("static" if glyph == "ship"
+            else pb.Hexatri.Motion.Name(p.icon.hexatri.motion).lower()),
+        icon=glyph,
+        bg_image=("space" if p.background.image == pb.Background.Image.STARFIELD
+                  else "none"),
+        seed=p.seed,
+        overlay=p.overlay.WhichOneof("layer") or "none",
+        matrix_angle=p.overlay.matrix.angle,
+        matrix_color=p.overlay.matrix.color or MATRIX_COLOR,
+    )
+
+
 # ---- CLI ------------------------------------------------------------------
 def parse_res(s):
     s = s.strip().lower()
@@ -715,6 +769,7 @@ def selftest():
     _assert_matrix(1920, 1080)
     _assert_matrix(1080, 1920)
     _assert_ship()
+    _assert_config()
 
     _assert_rejected(["--icon", "ship", "--fg", "rotate", "-o", "-"],
                      "--icon ship --fg rotate must be rejected")
@@ -736,6 +791,43 @@ def selftest():
           "one light; ship rejects --fg rotate, closeopen rejects --bg-image none, the "
           "--matrix-* flags reject a missing overlay, a bad angle and a bad colour")
     return 0
+
+
+def _assert_config():
+    """resolve() is the only bridge between the schema and the renderer's own
+    vocabulary, and `{}` must land exactly on the old flagless defaults --
+    Hexatri.ROTATE = 0 is the value that would otherwise flip silently."""
+    assert resolve(parse({})) == dict(
+        bg="static", fg="rotate", icon="hexatri", bg_image="none", seed=0,
+        overlay="none", matrix_angle=0.0, matrix_color=MATRIX_COLOR)
+    assert build_svg(640, 360, **resolve(parse({}))) == build_svg(640, 360), \
+        "an empty config must render what the old defaults rendered"
+
+    full = parse({"seed": 7,
+                  "background": {"motion": "CLOSEOPEN", "image": "STARFIELD"},
+                  "icon": {"ship": {}},
+                  "overlay": {"matrix": {"angle": 250, "color": "#395e53cc"}}})
+    assert resolve(full) == dict(
+        bg="closeopen", fg="static", icon="ship", bg_image="space", seed=7,
+        overlay="matrix", matrix_angle=250.0, matrix_color="#395e53cc")
+
+    assert resolve(parse({"icon": {"hexatri": {"motion": "STATIC"}}}))["fg"] == "static"
+    assert resolve(parse({"background": {"image": "STARFIELD"}}))["bg_image"] == "space"
+
+    for bad, why in (
+        ({"background": {"motion": "CLOSEOPEN", "image": "NONE"}},
+         "closeopen without an image must be rejected"),
+        ({"overlay": {"matrix": {"angle": 400}}},
+         "an out-of-range matrix angle must be rejected"),
+        ({"overlay": {"matrix": {"color": "395e53"}}},
+         "a malformed matrix colour must be rejected"),
+    ):
+        try:
+            validate(parse(bad))
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(why)
 
 
 def _assert_rejected(argv, why):
