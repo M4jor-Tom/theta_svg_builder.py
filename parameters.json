@@ -1,0 +1,7 @@
+{
+  "seed": 0,
+  "output": { "directory": { "path": "out", "resolutions": ["1080p"] } },
+  "background": { "motion": "LIGHTS", "image": "STARFIELD" },
+  "icon": { "hexatri": { "motion": "ROTATE" } },
+  "overlay": {}
+}

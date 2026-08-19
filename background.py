@@ -651,94 +651,59 @@ def resolve(p):
 
 # ---- CLI ------------------------------------------------------------------
 def parse_res(s):
-    s = s.strip().lower()
+    """'' -> 1080p, else a preset name or WIDTHxHEIGHT."""
+    s = (s or "1080p").strip().lower()
     if s in PRESETS:
         return PRESETS[s]
     m = re.fullmatch(r"(\d+)x(\d+)", s)
     if not m:
-        raise argparse.ArgumentTypeError(f"bad resolution '{s}': use WIDTHxHEIGHT or a preset {sorted(PRESETS)}")
+        raise ValueError(f"bad resolution '{s}': use WIDTHxHEIGHT or a preset {sorted(PRESETS)}")
     return int(m.group(1)), int(m.group(2))
 
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Trihexagonal animated SVG background builder.")
-    ap.add_argument("--bg", default="static", choices=BG, help="background animation")
-    ap.add_argument("--fg", default=None, choices=FG,
-                    help="center-icon animation (default: rotate for hexatri, static for ship)")
-    ap.add_argument("--icon", default="hexatri", choices=ICON, help="center glyph")
-    ap.add_argument("--bg-image", dest="bg_image", default="none", choices=BG_IMAGE,
-                    help="imagery inside some hexagons (required by --bg closeopen)")
-    ap.add_argument("--overlay", default="none", choices=OVERLAY, help="layer above the lattice")
-    ap.add_argument("--matrix-angle", dest="matrix_angle", type=float, default=None,
-                    help="--overlay matrix travel direction, 0-360 (0 = down, clockwise; default 0)")
-    ap.add_argument("--matrix-color", dest="matrix_color", default=None,
-                    help=f"--overlay matrix colour, #rrggbb or #rrggbbaa (default {MATRIX_COLOR})")
-    ap.add_argument("-r", "--resolution", default="1080p", help="comma list of presets or WIDTHxHEIGHT")
-    ap.add_argument("-o", "--out", default=None, help="output .svg file, '-' for stdout, or a directory")
-    ap.add_argument("-s", "--seed", type=int, default=0)
-    ap.add_argument("--list", action="store_true")
+    ap.add_argument("config", nargs="?", default="parameters.json",
+                    help="render parameters as JSON; parameters.proto is the schema")
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args(argv)
 
-    if args.list:
-        print("bg:       " + ", ".join(BG) + "   (closeopen: --bg-image space only)")
-        print("fg:       " + ", ".join(FG) + "   (rotate: --icon hexatri only)")
-        print("icon:     " + ", ".join(ICON))
-        print("bg-image: " + ", ".join(BG_IMAGE))
-        print("overlay:  " + ", ".join(OVERLAY)
-              + f"   (matrix: --matrix-angle 0-360, --matrix-color #rrggbbaa, default {MATRIX_COLOR})")
-        print("presets:  " + ", ".join(f"{k} ({w}x{h})" for k, (w, h) in PRESETS.items()))
-        return 0
     if args.selftest:
         return selftest()
 
-    if args.icon == "ship" and args.fg == "rotate":
-        ap.error("--fg rotate is not available for --icon ship (the ship is static by "
-                 "design); drop --fg, or use --icon hexatri")
-    if args.bg == "closeopen" and args.bg_image == "none":
-        ap.error("--bg closeopen has nothing to reveal with --bg-image none (its "
-                 "hexagons open onto a background image); add --bg-image space, or "
-                 "use --bg lights")
-    if args.overlay != "matrix":
-        for flag, val in (("--matrix-angle", args.matrix_angle),
-                          ("--matrix-color", args.matrix_color)):
-            if val is not None:
-                ap.error(f"{flag} has no rain to steer with --overlay {args.overlay}; "
-                         f"add --overlay matrix, or drop {flag}")
-    angle = args.matrix_angle if args.matrix_angle is not None else 0.0
-    if not 0 <= angle <= 360:
-        ap.error(f"--matrix-angle {fmt(angle)} is outside 0-360 (0 = falling down, "
-                 "increasing clockwise)")
-    color = args.matrix_color or MATRIX_COLOR
     try:
-        hex_rgba(color)
-    except ValueError as e:
-        ap.error(f"--matrix-color: {e}")
-    fg = args.fg or ("static" if args.icon == "ship" else "rotate")
+        params = load(args.config)
+        out = params.output
+        sink = out.WhichOneof("sink") or "directory"
+        if sink == "stdout":
+            sizes = [parse_res(out.stdout.resolution)]
+        elif sink == "file":
+            sizes = [parse_res(out.file.resolution)]
+        else:
+            sizes = [parse_res(r) for r in out.directory.resolutions] or [parse_res("")]
+    except (OSError, ValueError, json_format.ParseError) as e:
+        print(f"{args.config}: {e}", file=sys.stderr)
+        return 2
 
-    resolutions = [parse_res(r) for r in args.resolution.split(",")]
-
-    def render(w, h):
-        return build_svg(w, h, args.bg, fg, args.icon, args.bg_image, args.seed,
-                         args.overlay, angle, color)
-
-    if len(resolutions) == 1 and args.out == "-":
-        sys.stdout.write(render(*resolutions[0]))
+    kw = resolve(params)
+    if sink == "stdout":
+        sys.stdout.write(build_svg(*sizes[0], **kw))
         return 0
-    if len(resolutions) == 1 and args.out and args.out.endswith(".svg"):
-        with open(args.out, "w") as f:
-            f.write(render(*resolutions[0]))
-        print(args.out)
+    if sink == "file":
+        with open(out.file.path, "w") as f:
+            f.write(build_svg(*sizes[0], **kw))
+        print(out.file.path)
         return 0
 
-    outdir = args.out or "out"
+    outdir = out.directory.path or "out"
     os.makedirs(outdir, exist_ok=True)
-    for w, h in resolutions:   # every axis, always, in flag order -- no optional parts
+    for w, h in sizes:   # every axis, always, in schema order -- no optional parts
         path = os.path.join(
             outdir,
-            f"trihex-{args.bg}-{fg}-{args.icon}-{args.bg_image}-{args.overlay}-{w}x{h}.svg")
+            f"trihex-{kw['bg']}-{kw['fg']}-{kw['icon']}-{kw['bg_image']}-"
+            f"{kw['overlay']}-{w}x{h}.svg")
         with open(path, "w") as f:
-            f.write(render(w, h))
+            f.write(build_svg(w, h, **kw))
         print(path)
     return 0
 
@@ -771,18 +736,24 @@ def selftest():
     _assert_ship()
     _assert_config()
 
-    _assert_rejected(["--icon", "ship", "--fg", "rotate", "-o", "-"],
-                     "--icon ship --fg rotate must be rejected")
-    _assert_rejected(["--bg", "closeopen", "-o", "-"],
-                     "--bg closeopen --bg-image none must be rejected")
-    _assert_rejected(["--matrix-angle", "90", "-o", "-"],
-                     "--matrix-angle without --overlay matrix must be rejected")
-    _assert_rejected(["--matrix-color", "#112233", "-o", "-"],
-                     "--matrix-color without --overlay matrix must be rejected")
-    _assert_rejected(["--overlay", "matrix", "--matrix-angle", "400", "-o", "-"],
-                     "an out-of-range --matrix-angle must be rejected")
-    _assert_rejected(["--overlay", "matrix", "--matrix-color", "395e53", "-o", "-"],
-                     "a malformed --matrix-color must be rejected")
+    _assert_rejected({"icon": {"ship": {"motion": "ROTATE"}}},
+                     "the ship must not accept a motion")
+    _assert_rejected({"overlay": {"angle": 90}},
+                     "matrix knobs outside matrix must be rejected")
+    _assert_rejected({"output": {"file": {"path": "a.svg"}, "stdout": {}}},
+                     "two output sinks at once must be rejected")
+    _assert_rejected({"backgrond": {}},
+                     "a typo'd key must be rejected, not silently ignored")
+    _assert_rejected({"background": {"motion": "CLOSEOPEN", "image": "NONE"}},
+                     "closeopen without an image must be rejected")
+    _assert_rejected({"overlay": {"matrix": {"angle": 400}}},
+                     "an out-of-range matrix angle must be rejected")
+    _assert_rejected({"overlay": {"matrix": {"color": "395e53"}}},
+                     "a malformed matrix colour must be rejected")
+    _assert_rejected({"output": {"directory": {"resolutions": ["1080"]}}},
+                     "a malformed resolution must be rejected")
+    _assert_rejected("{not json", "malformed JSON must be rejected")
+    _assert_rejected(None, "a missing config file must be rejected")
 
     print(f"selftest ok: {n} bg x fg x icon x bg-image x overlay combos valid; "
           "holder/intersector, clear-center, space-cell clearance/lights-opt-out/blind "
@@ -830,16 +801,21 @@ def _assert_config():
             raise AssertionError(why)
 
 
-def _assert_rejected(argv, why):
+def _assert_rejected(config, why):
+    """config: a dict to write as JSON, a raw string for malformed JSON, or None
+    to leave the file absent. Goes through main() so the whole boundary is
+    covered -- reading, parsing, validating and reporting."""
     import contextlib
     import io
-    with contextlib.redirect_stderr(io.StringIO()):      # argparse prints usage
-        try:
-            main(argv)
-        except SystemExit as e:
-            assert e.code == 2, f"expected argparse exit 2, got {e.code}"
-        else:
-            raise AssertionError(why)
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "parameters.json")
+        if config is not None:
+            with open(path, "w") as f:
+                f.write(config if isinstance(config, str) else json.dumps(config))
+        with contextlib.redirect_stderr(io.StringIO()):
+            code = main([path])
+    assert code == 2, f"{why}: expected exit 2, got {code}"
 
 
 def _assert_space(w, h):
