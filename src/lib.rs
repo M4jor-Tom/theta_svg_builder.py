@@ -4,6 +4,7 @@
 //! from background.py:1-52.)
 
 pub mod params;
+pub mod rng;
 
 use std::fmt;
 
