@@ -110,40 +110,73 @@ pub fn css() -> String {
     let (k0, k1, k2, k3) = BLIND_KF;
     let (f0, f1) = MATRIX_KF;
     let (f0, f1) = (f0 as i64, f1 as i64);
-    format!(
-        "<style>\
-         @keyframes spin{{to{{transform:rotate(360deg)}}}}\
-         @keyframes rspin{{to{{transform:rotate(-360deg)}}}}\
-         @keyframes scan{{0%,100%{{stroke-opacity:.16}}50%{{stroke-opacity:.62}}}}\
-         @keyframes wavef{{0%,100%{{fill-opacity:.12}}50%{{fill-opacity:.6}}}}\
-         @keyframes light{{0%{{stroke-opacity:.27;fill-opacity:0}}7%{{stroke-opacity:.85;fill-opacity:0}}\
-         16%{{stroke-opacity:.85;fill-opacity:.42}}26%{{stroke-opacity:.27;fill-opacity:0}}\
-         100%{{stroke-opacity:.27;fill-opacity:0}}}}\
-         @keyframes lightb{{0%{{stroke-opacity:.34}}8%{{stroke-opacity:.9}}\
-         24%{{stroke-opacity:.34}}100%{{stroke-opacity:.34}}}}\
-         @keyframes blind{{0%,{k0}%{{transform:scale(1)}}\
-         {k1}%,{k2}%{{transform:scale(0)}}{k3}%,100%{{transform:scale(1)}}}}\
-         @keyframes winvis{{0%,{k0m2}%{{display:none}}\
-         {k0m1}%,{k3p1}%{{display:inline}}{k3p2}%,100%{{display:none}}}}\
-         .spin{{animation:spin 24s linear infinite;transform-box:fill-box;transform-origin:center}}\
-         .rspin{{animation:rspin 24s linear infinite;transform-box:fill-box;transform-origin:center}}\
-         .scan{{animation:scan 5s ease-in-out infinite}}\
-         .wavef{{animation:wavef 5s ease-in-out infinite}}\
-         .light{{animation:light 9s ease-in-out infinite}}\
-         .lightb{{animation:lightb 9s ease-in-out infinite}}\
-         .blind{{animation:blind 75s ease-in-out infinite;transform-box:fill-box;\
-         transform-origin:center;transform:scale(0)}}\
-         .win{{animation:winvis 75s ease-in-out infinite;display:inline}}\
-         @keyframes rain{{0%{{fill-opacity:var(--o)}}{f0}%{{fill-opacity:var(--t)}}\
-         {f1}%,100%{{fill-opacity:0}}}}\
-         .rain{{animation:rain var(--d) linear infinite}}\
-         @media (prefers-reduced-motion:reduce){{*{{animation:none!important}}}}\
-         </style>",
+    let mut out = String::from("<style>");
+    out.push_str("@keyframes spin{to{transform:rotate(360deg)}}");
+    out.push_str("@keyframes rspin{to{transform:rotate(-360deg)}}");
+    out.push_str("@keyframes scan{0%,100%{stroke-opacity:.16}50%{stroke-opacity:.62}}");
+    out.push_str("@keyframes wavef{0%,100%{fill-opacity:.12}50%{fill-opacity:.6}}");
+    out.push_str(
+        "@keyframes light{0%{stroke-opacity:.27;fill-opacity:0}7%{stroke-opacity:.85;fill-opacity:0}\
+         16%{stroke-opacity:.85;fill-opacity:.42}26%{stroke-opacity:.27;fill-opacity:0}\
+         100%{stroke-opacity:.27;fill-opacity:0}}",
+    );
+    out.push_str(
+        "@keyframes lightb{0%{stroke-opacity:.34}8%{stroke-opacity:.9}\
+         24%{stroke-opacity:.34}100%{stroke-opacity:.34}}",
+    );
+    // closing is opening played backwards, so one symmetric cycle covers both.
+    // Mostly shut: 86% closed, ~5% shrinking, 4% open, ~5% growing back.
+    write!(
+        out,
+        "@keyframes blind{{0%,{k0}%{{transform:scale(1)}}\
+         {k1}%,{k2}%{{transform:scale(0)}}{k3}%,100%{{transform:scale(1)}}}}"
+    )
+    .expect("writing to a String");
+    // ...and the window switches off whenever its blind covers it, with a
+    // 1% margin either side so the stars are already there before the blind
+    // starts to move. Both spans come from BLIND_KF: they cannot drift.
+    write!(
+        out,
+        "@keyframes winvis{{0%,{k0m2}%{{display:none}}\
+         {k0m1}%,{k3p1}%{{display:inline}}{k3p2}%,100%{{display:none}}}}",
         k0m2 = k0 - 2,
         k0m1 = k0 - 1,
         k3p1 = k3 + 1,
         k3p2 = k3 + 2,
     )
+    .expect("writing to a String");
+    out.push_str(
+        ".spin{animation:spin 24s linear infinite;transform-box:fill-box;transform-origin:center}",
+    );
+    out.push_str(
+        ".rspin{animation:rspin 24s linear infinite;transform-box:fill-box;transform-origin:center}",
+    );
+    out.push_str(".scan{animation:scan 5s ease-in-out infinite}");
+    out.push_str(".wavef{animation:wavef 5s ease-in-out infinite}");
+    out.push_str(".light{animation:light 9s ease-in-out infinite}");
+    out.push_str(".lightb{animation:lightb 9s ease-in-out infinite}");
+    // both rest in the *open* state: prefers-reduced-motion kills the
+    // animations below, and a blind stuck shut (or a window stuck off)
+    // would hide the starfield entirely
+    out.push_str(
+        ".blind{animation:blind 75s ease-in-out infinite;transform-box:fill-box;\
+         transform-origin:center;transform:scale(0)}",
+    );
+    out.push_str(".win{animation:winvis 75s ease-in-out infinite;display:inline}");
+    // One glyph's life, and the only thing overlay.matrix animates: the
+    // characters never move, the lighting does. --o/--t (the colour's alpha
+    // and its trail step) and --d (the column's speed) are all inherited
+    // from ancestors, so a glyph itself only has to carry its delay.
+    write!(
+        out,
+        "@keyframes rain{{0%{{fill-opacity:var(--o)}}{f0}%{{fill-opacity:var(--t)}}\
+         {f1}%,100%{{fill-opacity:0}}}}"
+    )
+    .expect("writing to a String");
+    out.push_str(".rain{animation:rain var(--d) linear infinite}");
+    out.push_str("@media (prefers-reduced-motion:reduce){*{animation:none!important}}");
+    out.push_str("</style>");
+    out
 }
 
 #[cfg(test)]
