@@ -4,6 +4,6 @@
 
 # Planned
 
-- [ ] Determined hash-map test
+- [x] Determined hash-map test
 - [ ] Refactor to rust with object split
 - [ ] UI
