@@ -53,8 +53,8 @@ values, listed so you can match them by eye without running anything.
 | role | value | notes |
 |------|-------|-------|
 | canvas gradient | `#eef3f6` → `#d9e3ea` | top-left to bottom-right |
-| `a` hexagons, ship hull | `#365665` | steel-blue, `#6fb7d1` darkened 58% |
-| `b` triangles, fuselage | `#395e53` | sea-green, `#77c9a6` darkened 58% |
+| `a` hexagons, ship wings | `#365665` | steel-blue, `#6fb7d1` darkened 58% |
+| `b` triangles, ship ridge | `#395e53` | sea-green, `#77c9a6` darkened 58% |
 | `ink` lattice strokes | `#2a424f` | at 0.27 opacity |
 | `VOID` space ground | `#16212a` | deep blue-slate, **never `#000`** |
 | stars | `#eef3f6` | the canvas highlight, reused |
@@ -74,8 +74,36 @@ different design; keeping it in the blue-slate family makes it a window.
 - Sacred-geometry nesting is the icon language: shapes contain shapes, and
   tangency is deliberate. `hexatri` interleaves 6-fold and 3-fold symmetry.
 - **Nested copies of one shape read as a chevron, not an object.** The `ship`
-  glyph works because the narrow fuselage and the wide swept delta are different
-  shapes; an earlier version using two concentric deltas just looked like an "A".
+  glyph works because a narrow shape reads against the wide swept delta; an
+  earlier version using two concentric deltas just looked like an "A". The narrow
+  shape is now the folded ridge rather than a second outline (see below), but the
+  rule it satisfies is unchanged.
+
+## The cloaked ship (`--icon ship`)
+
+The one glyph that is a *solid* rather than linework: a sheet folded along its
+spine, read as four facets — lit wing, lit ridge face, shadowed ridge face,
+shadowed wing. The silhouette is exactly the old one; the facets tile the hull
+quad, which `_assert_ship` checks by area so the cloak can never quietly move it.
+
+Three constraints hold it inside the five rules. *How* each one is achieved is
+argued in `ico_ship`'s docstring; what matters here is why the mood needs them:
+
+- **Relief is value, not linework.** The interior folds carry no stroke at all —
+  outlining them reads as wireframe, an object seen *through* instead of a solid
+  seen *lit*. Only the silhouette keeps an outline, at its old 3.6 width.
+- **One light, not four.** Every facet is lit by the same ramp, from the upper
+  left, where the canvas gradient is already brightest. Light the facets
+  separately and they read as loose shards instead of one folded object.
+- **The cloak is the translucency.** No facet reaches `0.3`, so the halo and the
+  lattice read straight through the hull. Filled, the glyph still spends less ink
+  than the old double outline, so rule 1 holds — but a facet pushed opaque would
+  both flatten the relief and buy the second dark mass rule 2 forbids.
+
+The crest highlight along the spine is the only bright element, canvas colour
+fading aft. On a high-key page a highlight cannot out-light the paper, so it reads
+only where it lies over the shadowed ridge face: light added by *removing tint*,
+the same inversion the rain's head uses. Rule 4 in a third costume.
 
 ## Space cells (`--bg-image space`)
 

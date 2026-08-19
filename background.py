@@ -12,7 +12,8 @@ Light theme only. The four axes below are independent and combine freely:
   --fg rotate         the hexatri icon's triangle rings counter-rotate
   --fg static         still icon
   --icon hexatri      nested hexagon/triangle glyph
-  --icon ship         simple delta spaceship (always static -- see below)
+  --icon ship         cloaked delta spaceship: one folded sheet read as four
+                      translucent facets under one light (always static)
   --bg-image none     plain lattice
   --bg-image space    a few hexagons become windows onto a procedural starfield
   --overlay none      nothing above the lattice
@@ -435,20 +436,64 @@ def ico_hexatri(fg):
 
 
 def ico_ship():
-    """Simple delta spaceship on the same 200-unit grid as ico_hexatri, in the
-    same thin-outline language: swept hull, narrow fuselage, the hexagonal
-    cockpit carried over from the other glyph, and a two-dash exhaust. No rotate
-    variant -- a spinning ship reads as a crash, not as ambience."""
-    a, b = PAL["a"], PAL["b"]
-    # A narrow fuselage read against a wide swept delta -- two *different* shapes.
-    # Concentric copies of one delta just read as a chevron.
-    hull = [(0, -80), (68, 46), (0, 20), (-68, 46)]
-    fuselage = [(0, -64), (17, 34), (-17, 34)]
-    parts = [f'<polygon points="{pts(hull)}" fill="none" stroke="{a}" stroke-width="3.6"/>',
-             f'<polygon points="{pts(fuselage)}" fill="none" stroke="{b}" stroke-width="2.4" '
-             f'stroke-opacity="0.8"/>',
-             f'<polygon points="{pts(regular_poly(0,-22,8,6,math.pi/6))}" fill="{a}" '
-             f'fill-opacity="0.28" stroke="{a}" stroke-width="2"/>']
+    """Cloaked delta spaceship on the same 200-unit grid as ico_hexatri: a sheet
+    folded along its spine, read as four facets rather than as an outline. Same
+    silhouette as ever -- the facets tile the hull quad exactly, so nothing about
+    the footprint moved. No rotate variant: a spinning ship reads as a crash.
+
+    RELIEF IS VALUE, NOT LINEWORK. The four facets meet along the spine and carry
+    nothing but a fill: lit wing, lit ridge face, shadowed ridge face, shadowed
+    wing, stepped 0.04 -> 0.28. Stroking the interior folds as well would read as
+    wireframe -- an object seen through, not a solid seen lit -- so the folds are
+    left to the value step alone, and only the silhouette keeps its outline.
+
+    ONE LIGHT, NOT FOUR. Every facet draws the same ramp, transparent at the
+    upper left and opaque at the lower right, i.e. lit from where the canvas
+    gradient is already brightest. That takes gradientUnits="userSpaceOnUse" for
+    the same reason #bg does: the default objectBoundingBox restarts the ramp
+    inside every triangle, which gives four separately-lit shards instead of one
+    solid under one light, and the fold stops reading.
+
+    THE CLOAK IS THE TRANSLUCENCY. Nothing here reaches 0.3, so the halo and the
+    lattice come through the hull. That also keeps the glyph inside the contrast
+    budget: filled, but still spending less ink than the old double outline.
+
+    The crest highlight is the one bright element, canvas colour fading aft. On a
+    high-key page a highlight cannot out-light the paper, so it reads only where
+    it lies over the shadowed ridge face -- light added by removing tint, the
+    same inversion the rain's head uses. The ridge stays 35% of the half-span
+    wide, so the narrow-shape-against-wide-shape rule still holds -- the narrow
+    shape is now a fold instead of a second outline. Any narrower and its two
+    faces are slivers rather than planes, and the fold stops reading as one.
+    """
+    a, b, lit = PAL["a"], PAL["b"], PAL["bg"][0]
+    N, R, L, T = (0, -80), (68, 46), (-68, 46), (0, 20)
+    Kl, Kr = (-23.8, 29.1), (23.8, 29.1)    # ridge feet, 35% along the trailing edges
+    # One source for the crest, so its fade cannot stop landing on its own ends.
+    # It starts short of the nose: the hull stroke overdraws the apex, so the
+    # highlight emerges from under the point instead of fighting it for the pixel.
+    cy0, cy1 = N[1] + 6, T[1]
+    # The ramp is deliberately shallow (0.5 -> 1, not 0 -> 1): it is the shading
+    # *within* a plane, and a wide one drowns the step *between* planes, which is
+    # the thing actually doing the relief. Four gently-lit shards read as one flat
+    # smear; four flat-ish planes at four values read as a fold.
+    ramp = "".join(
+        f'<linearGradient id="shp{k}" gradientUnits="userSpaceOnUse" x1="-70" y1="-80" '
+        f'x2="70" y2="60"><stop offset="0%" stop-color="{col}" stop-opacity="0.5"/>'
+        f'<stop offset="100%" stop-color="{col}"/></linearGradient>'
+        for k, col in (("a", a), ("b", b)))
+    parts = [f'<defs>{ramp}<linearGradient id="shpe" gradientUnits="userSpaceOnUse" x1="0" '
+             f'y1="{fmt(cy0)}" x2="0" y2="{fmt(cy1)}"><stop offset="0%" stop-color="{lit}" '
+             f'stop-opacity="0.95"/><stop offset="100%" stop-color="{lit}" '
+             f'stop-opacity="0"/></linearGradient></defs>']
+    for facet, k, v in (((N, Kl, L), "a", 0.09), ((N, T, Kl), "b", 0.04),
+                        ((N, Kr, T), "b", 0.28), ((N, R, Kr), "a", 0.22)):
+        parts.append(f'<polygon points="{pts(facet)}" fill="url(#shp{k})" fill-opacity="{fmt(v)}"/>')
+    parts += [f'<line x1="0" y1="{fmt(cy0)}" x2="0" y2="{fmt(cy1)}" stroke="url(#shpe)" '
+              f'stroke-width="2.2"/>',
+              f'<polygon points="{pts([N, R, T, L])}" fill="none" stroke="{a}" stroke-width="3.6"/>',
+              f'<polygon points="{pts(regular_poly(0,-22,8,6,math.pi/6))}" fill="{a}" '
+              f'fill-opacity="0.28" stroke="{a}" stroke-width="2"/>']
     for i, (hw, y) in enumerate(((14, 42), (8, 54))):   # exhaust, aft of the wing roots
         parts.append(f'<line x1="{-hw}" y1="{y}" x2="{hw}" y2="{y}" stroke="{b}" '
                      f'stroke-width="2.4" stroke-opacity="{fmt(0.6 - i * 0.28)}"/>')
@@ -657,6 +702,7 @@ def selftest():
                         parseString(svg)
                         assert svg.startswith("<svg") and "prefers-reduced-motion" in svg
                         assert ("<line x1=" in svg) == (icon == "ship"), "icon dispatch is wrong"
+                        assert ("url(#shp" in svg) == (icon == "ship"), "ship facets leaked across icons"
                         assert ("<clipPath" in svg) == (img == "space"), "bg-image dispatch is wrong"
                         assert ('class="blind"' in svg) == (bg == "closeopen" and img == "space"), \
                             "blinds must exist exactly when closeopen has windows to cover"
@@ -668,6 +714,7 @@ def selftest():
     _assert_space(1080, 1920)
     _assert_matrix(1920, 1080)
     _assert_matrix(1080, 1920)
+    _assert_ship()
 
     _assert_rejected(["--icon", "ship", "--fg", "rotate", "-o", "-"],
                      "--icon ship --fg rotate must be rejected")
@@ -685,7 +732,8 @@ def selftest():
     print(f"selftest ok: {n} bg x fg x icon x bg-image x overlay combos valid; "
           "holder/intersector, clear-center, space-cell clearance/lights-opt-out/blind "
           "layering hold; rain stays upright, fades from its head and never moves the "
-          "lattice; ship rejects --fg rotate, closeopen rejects --bg-image none, the "
+          "lattice; the ship's facets tile its hull at four translucent values under "
+          "one light; ship rejects --fg rotate, closeopen rejects --bg-image none, the "
           "--matrix-* flags reject a missing overlay, a bad angle and a bad colour")
     return 0
 
@@ -749,6 +797,35 @@ def _assert_space(w, h):
     assert wins == blinds != [], "a window is out of phase with its own blind"
     assert 'class="win"' not in build_svg(w, h, bg="lights", bg_image="space", seed=0), \
         "a bg without blinds has nothing covering its windows, so they must never switch off"
+
+
+def _assert_ship():
+    """--icon ship must read as a folded solid: four facets that tile the hull
+    exactly (so the cloak never moved the silhouette), no two at the same value
+    (so every fold has relief), none opaque (so it stays a cloak), and every ramp
+    spanning the glyph rather than restarting inside a facet.
+
+    Asserted against the glyph alone, never the page: the lattice is thousands of
+    polygons that would match these patterns by coincidence, which is the trap
+    _assert_space documents. The glyph is resolution-free -- it is drawn on the
+    200-unit grid and scaled by the wrapper -- so it needs no w/h to check."""
+    def area(poly):
+        P = [tuple(map(float, p.split(","))) for p in poly.split()]
+        return abs(sum(P[i][0] * P[i - 1][1] - P[i - 1][0] * P[i][1]
+                       for i in range(len(P)))) / 2
+
+    glyph = ico_ship()
+    facets = re.findall(r'<polygon points="([^"]+)" fill="url\(#shp[ab]\)" fill-opacity="([\d.]+)"', glyph)
+    assert len(facets) == 4, f"the hull needs four facets to fold, got {len(facets)}"
+    vals = [float(v) for _, v in facets]
+    assert len(set(vals)) == 4, "two facets share a value, so that fold has no relief"
+    assert max(vals) < 0.3, "a facet is too opaque to read as a cloak"
+    hull = re.findall(r'<polygon points="([^"]+)" fill="none"', glyph)
+    assert len(hull) == 1, "the ship needs exactly one silhouette outline"
+    assert abs(sum(area(p) for p, _ in facets) - area(hull[0])) < 1e-6, \
+        "the facets no longer tile the hull: the cloak changed the silhouette"
+    assert glyph.count("<linearGradient") == glyph.count('gradientUnits="userSpaceOnUse"'), \
+        "a facet ramp restarts inside its facet, so that facet is lit on its own"
 
 
 def _assert_matrix(w, h):

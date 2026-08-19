@@ -21,7 +21,9 @@ documented in [`docs/mood/`](docs/mood/).
 ## Icons
 
 - `--icon hexatri` — the nested hexagon/triangle glyph. Supports `--fg rotate`.
-- `--icon ship` — a simple delta spaceship: narrow fuselage, wide swept wings, hexagonal cockpit.
+- `--icon ship` — a cloaked delta spaceship: a swept hull folded along its spine into
+  four translucent facets, lit crest, hexagonal cockpit. Nothing reaches a third
+  opacity, so the lattice reads straight through it.
 
 The ship is **static by design**, so `--icon ship` resolves `--fg` to `static`.
 Passing `--fg rotate` with it is rejected rather than silently ignored:
