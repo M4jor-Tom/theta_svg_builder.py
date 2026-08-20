@@ -8,6 +8,7 @@ pub mod params;
 pub mod rng;
 pub mod style;
 pub mod svg;
+pub mod trihex;
 
 use std::fmt;
 

@@ -2,12 +2,15 @@
 //! three content slots (background pattern, rain overlay, centre glyph).
 use crate::geom::{Lattice, fmt};
 use crate::params::{Glyph, Scene, background};
+use crate::rng::PyRandom;
 use crate::style::{PAL, css};
+use crate::trihex::pat_trihex;
 
 /// Port of `background.py:548-594`. Layout depends only on `scene.seed`, never
 /// on motion/image/glyph/overlay -- the RNG is seeded first for exactly that
 /// reason.
 pub fn build_svg(w: u32, h: u32, scene: &Scene) -> String {
+    let mut rng = PyRandom::new(&format!("trihex:{}", scene.seed));
     let lat = Lattice::new(w, h);
     let (u, clear_r) = (lat.u, lat.clear_r);
 
@@ -46,7 +49,7 @@ pub fn build_svg(w: u32, h: u32, scene: &Scene) -> String {
         }
     }
 
-    let bg_svg = String::new();
+    let bg_svg = pat_trihex(&lat, &mut rng);
     let rain_svg = String::new();
     let k = u * 0.34 / 200.0;
     let glyph = String::new();
