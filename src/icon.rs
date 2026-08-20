@@ -10,6 +10,37 @@ use crate::style::PAL;
 /// stroke width, stroke opacity, rotate-origin-y%.
 type Ring = (f64, usize, f64, &'static str, f64, f64, Option<f64>);
 
+/// One ring of `hexatri.svg`'s badge, already reduced to what the template
+/// substitutes verbatim. `swd`/`o` are `String`, pre-rendered through `fmt`,
+/// not the `f64`s the ring table holds -- a template may only substitute, so
+/// letting it format a float would hand it a say over the glyph's bytes. `cls`
+/// and `style` travel together and are built here, not in the template: the
+/// class name picks `rspin` vs `spin` by ring index, and `style` is the whole
+/// `animation-duration:...;transform-origin:...` value, already assembled
+/// (`24 - idx * 3` for the duration, the ring table's `oy` for the origin) --
+/// `None` for both when the ring doesn't rotate or `rotate` is false, so the
+/// template's `{% if let %}` is the only conditional left, never an
+/// assembler.
+struct HexRing {
+    points: String,
+    col: &'static str,
+    swd: String,
+    o: String,
+    cls: Option<&'static str>,
+    style: Option<String>,
+}
+
+/// The template context for `hexatri.svg`: the four rings plus the solid
+/// centre hexagon, which shares the badge's `a` colour and is not itself a
+/// `HexRing` (it never rotates and has no stroke-width/opacity pair).
+#[derive(askama::Template)]
+#[template(path = "hexatri.svg")]
+struct Hexatri {
+    rings: Vec<HexRing>,
+    a: &'static str,
+    core: String,
+}
+
 /// Nested hexagon<->triangle glyph. `rotate` -> the two triangle rings
 /// counter-spin inside the static hex frame (rotation centres pinned to the
 /// icon centre via transform-origin, so no wobble).
@@ -21,29 +52,35 @@ pub fn ico_hexatri(rotate: bool) -> String {
         (48.0, 6, PI / 6.0, a, 2.6, 0.8, None),
         (42.0, 3, PI / 2.0, b, 2.4, 0.8, Some(33.3)), // down triangle
     ];
-    let mut parts = String::new();
-    for (idx, (r, n, rot, col, swd, o, oy)) in rings.into_iter().enumerate() {
-        let mut attr = String::new();
-        if let Some(oy) = oy.filter(|_| rotate) {
-            let cls = if idx == 1 { "rspin" } else { "spin" };
-            let dur = 24 - idx * 3;
-            attr = format!(
-                " class=\"{cls}\" style=\"animation-duration:{dur}s;transform-origin:50% {oy}%\""
-            );
-        }
-        parts.push_str(&format!(
-            "<polygon{attr} points=\"{}\" fill=\"none\" stroke=\"{col}\" stroke-width=\"{}\" \
-             stroke-opacity=\"{}\"/>",
-            pts(&regular_poly(0.0, 0.0, r, n, rot)),
-            fmt(swd),
-            fmt(o)
-        ));
-    }
-    parts.push_str(&format!(
-        "<polygon points=\"{}\" fill=\"{a}\" fill-opacity=\"0.28\" stroke=\"{a}\" stroke-width=\"2\"/>",
-        pts(&regular_poly(0.0, 0.0, 16.0, 6, PI / 6.0))
-    ));
-    parts
+    let rings = rings
+        .into_iter()
+        .enumerate()
+        .map(|(idx, (r, n, rot, col, swd, o, oy))| {
+            let (cls, style) = match oy.filter(|_| rotate) {
+                Some(oy) => {
+                    let cls = if idx == 1 { "rspin" } else { "spin" };
+                    let dur = 24 - idx * 3;
+                    (
+                        Some(cls),
+                        Some(format!(
+                            "animation-duration:{dur}s;transform-origin:50% {oy}%"
+                        )),
+                    )
+                }
+                None => (None, None),
+            };
+            HexRing {
+                points: pts(&regular_poly(0.0, 0.0, r, n, rot)),
+                col,
+                swd: fmt(swd),
+                o: fmt(o),
+                cls,
+                style,
+            }
+        })
+        .collect();
+    let core = pts(&regular_poly(0.0, 0.0, 16.0, 6, PI / 6.0));
+    Hexatri { rings, a, core }.render().unwrap()
 }
 
 /// One shaded facet, already reduced to what `ship.svg` substitutes verbatim:
