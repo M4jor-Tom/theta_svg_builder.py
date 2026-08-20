@@ -46,12 +46,40 @@ pub fn ico_hexatri(rotate: bool) -> String {
     parts
 }
 
+/// One shaded facet, already reduced to what `ship.svg` substitutes verbatim:
+/// the polygon's `points`, which palette ramp it sits under (`k`, matching
+/// the `id="shp{k}"` gradient `ico_ship` builds for the same key), and its
+/// `fill-opacity`. `v` is a `String`, pre-rendered through `fmt`, not the
+/// `f64` it started as -- see `Ship`'s docstring for why that is not
+/// optional.
 pub struct ShipFacet {
     pub points: String,
     pub k: &'static str,
     pub v: String,
 }
 
+/// One exhaust streak. `x1`/`x2` are both stored, even though `x1 == -x2`,
+/// because the template may only substitute -- it must not assemble a
+/// coordinate by concatenating a sign onto a magnitude at render time. See
+/// `Ship`'s docstring for the same rule applied to the rest of the glyph.
+struct Exhaust {
+    x1: i32,
+    x2: i32,
+    y: i32,
+    o: String,
+}
+
+/// The template context for `ship.svg`. This struct, not the ship, is what
+/// `ico_ship` actually builds: every field is either a `&'static str` (an
+/// already-interned palette colour) or a `String`/`i32` that Rust finished
+/// computing before the struct was assembled -- never a raw `f64`. That is
+/// the mechanism, not a style choice: this crate's boundary is "geometry
+/// stays in Rust, a template may not derive a vertex or a coordinate", and a
+/// template has no way to violate that if the only inputs it ever sees are
+/// values Rust already reduced to their final digits. Handing the template
+/// an `f64` instead would let its own float-formatting pick the glyph's
+/// bytes, which is precisely the byte-exactness this struct exists to keep
+/// out of its reach.
 #[derive(askama::Template)]
 #[template(path = "ship.svg")]
 struct Ship {
@@ -64,7 +92,7 @@ struct Ship {
     facets: Vec<ShipFacet>,
     hull: String,
     core: String,
-    exhaust: Vec<(i32, i32, String)>,
+    exhaust: Vec<Exhaust>,
 }
 
 /// Cloaked delta spaceship on the same 200-unit grid as `ico_hexatri`: a sheet
@@ -135,7 +163,12 @@ pub fn ico_ship() -> String {
     let exhaust = [(14, 42), (8, 54)]
         .into_iter()
         .enumerate()
-        .map(|(i, (hw, y))| (hw, y, fmt(0.6 - i as f64 * 0.28)))
+        .map(|(i, (hw, y))| Exhaust {
+            x1: -hw,
+            x2: hw,
+            y,
+            o: fmt(0.6 - i as f64 * 0.28),
+        })
         .collect();
     Ship {
         a,
