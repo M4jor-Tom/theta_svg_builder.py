@@ -11,7 +11,11 @@ use crate::style::{PAL, css};
 use crate::trihex::pat_trihex;
 
 /// The template context for `defs.svg`: the gradients and filter every render
-/// needs, plus the starfield nebula pair. `nebulae` is empty unless
+/// needs, plus the starfield nebula pair. `w04`/`h`/`bg0`/`bg1` feed the `bg`
+/// gradient, which is `userSpaceOnUse` so any shape can paint canvas -- the
+/// default `objectBoundingBox` would squeeze the whole ramp into a single
+/// hexagon, and a closed blind (`background.motion` CLOSEOPEN) would read as
+/// a patch instead of vanishing into the page. `nebulae` is empty unless
 /// `scene.image` is `Starfield`, and that alone decides whether the template
 /// emits them -- there is no separate `starfield: bool` next to it, because a
 /// bool that must agree with the vec's length is a second way to say the same
@@ -39,6 +43,14 @@ struct Defs {
 /// output in `</svg>\n`, and the golden corpus is byte-exact against that, so
 /// the second newline is load-bearing -- collapsing it back to one silently
 /// drops the render's last byte.
+///
+/// Its `viewBox="0 0 {{+ ws +}} {{+ hs }}"` needs those `+` markers because
+/// `whitespace = "suppress"` trims whitespace-only text next to `{{ }}`
+/// expressions the same as it does around `{% %}` blocks -- without them the
+/// literal spaces between "0 0", `ws` and `hs` vanish and the attribute reads
+/// as `viewBox="0 019201080"`. Every other interpolation in this file and in
+/// `defs.svg` sits directly against a quote, bracket or another tag, so this
+/// is the one place that needs them.
 #[derive(askama::Template)]
 #[template(path = "root.svg")]
 struct Root {
@@ -64,9 +76,6 @@ pub fn build_svg(w: u32, h: u32, scene: &Scene) -> String {
     let lat = Lattice::new(w, h);
     let (u, clear_r) = (lat.u, lat.clear_r);
 
-    // userSpaceOnUse so any shape can paint canvas: the default objectBoundingBox
-    // would squeeze the whole ramp into a single hexagon, and a closed blind
-    // (background.motion CLOSEOPEN) would read as a patch instead of vanishing into the page.
     let nebulae = if scene.image == background::Image::Starfield {
         vec![("neba", "#6fb7d1"), ("nebb", "#77c9a6")]
     } else {
