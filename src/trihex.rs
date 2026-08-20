@@ -2,6 +2,8 @@
 use std::collections::{HashMap, HashSet};
 use std::f64::consts::PI;
 
+use askama::Template;
+
 use crate::geom::{Lattice, NB, SQRT3, fmt, pts, regular_poly};
 use crate::params::{Scene, background};
 use crate::rng::{PyRandom, cell_rng};
@@ -99,73 +101,6 @@ pub fn space_cells(lat: &Lattice, seed: u32, every: bool) -> HashSet<(i32, i32)>
     out
 }
 
-/// One hexagon of procedural deep space: clipped void ground, a faint nebula,
-/// then seeded stars. Drawn, never embedded -- no assets, crisp at any size.
-///
-/// `phase` (background.motion CLOSEOPEN) is its blind's timing, which makes the
-/// cell switch itself off while that blind covers it. SVG does no occlusion
-/// culling, so without this the stars are repainted every frame under a shut
-/// blind.
-// the reference's own signature (background.py:207); the caller already holds
-// the formatted polygon, so there is nothing here to bundle away
-#[allow(clippy::too_many_arguments)]
-fn space_cell(
-    seed: u32,
-    poly: &str,
-    cx: f64,
-    cy: f64,
-    s: f64,
-    r: i32,
-    c: i32,
-    phase: Option<&str>,
-) -> String {
-    let mut g = cell_rng("star", seed, r, c);
-    let cid = format!("sp{r}_{c}"); // cell coords, so ids are stable
-    let win = phase.map_or(String::new(), |p| format!(" class=\"win\" style=\"{p}\""));
-    let star = &PAL.bg.0;
-    let (nx, ny) = (cx + (g.random() - 0.5) * s, cy + (g.random() - 0.5) * s);
-    let (nrx, nry) = (s * (0.55 + g.random() * 0.5), s * (0.30 + g.random() * 0.3));
-    let neb = if g.random() < 0.6 { "neba" } else { "nebb" };
-    let ang = g.random() * 180.0;
-    let void = &*VOID;
-    let (nxf, nyf) = (fmt(nx), fmt(ny));
-    let mut p = format!(
-        "<clipPath id=\"{cid}\"><polygon points=\"{poly}\"/></clipPath>\
-         <g{win} clip-path=\"url(#{cid})\">\
-         <polygon points=\"{poly}\" fill=\"{void}\"/>\
-         <ellipse cx=\"{nxf}\" cy=\"{nyf}\" rx=\"{}\" ry=\"{}\" \
-         fill=\"url(#{neb})\" transform=\"rotate({} {nxf} {nyf})\"/>",
-        fmt(nrx),
-        fmt(nry),
-        fmt(ang)
-    );
-    for i in 0..SPACE_STARS {
-        let x = cx + (g.random() - 0.5) * 2.0 * s;
-        let y = cy + (g.random() - 0.5) * SQRT3 * s;
-        let mut rad = s * (0.008 + g.random().powi(2) * 0.022);
-        let o = 0.35 + g.random() * 0.6;
-        if i < 2 {
-            // two anchor stars get a soft bloom
-            p.push_str(&format!(
-                "<circle cx=\"{}\" cy=\"{}\" r=\"{}\" fill=\"{star}\" fill-opacity=\"0.12\"/>",
-                fmt(x),
-                fmt(y),
-                fmt(rad * 3.5)
-            ));
-            rad *= 1.4;
-        }
-        p.push_str(&format!(
-            "<circle cx=\"{}\" cy=\"{}\" r=\"{}\" fill=\"{star}\" fill-opacity=\"{}\"/>",
-            fmt(x),
-            fmt(y),
-            fmt(rad),
-            fmt(o)
-        ));
-    }
-    p.push_str("</g>");
-    p
-}
-
 /// background.motion CLOSEOPEN: the timing of one cell's shutter, drawn from the
 /// cell's own stream rather than draw order. The blind and the window it covers
 /// are given this same string, so the window can switch itself off exactly while
@@ -178,10 +113,183 @@ fn blind_phase(seed: u32, r: i32, c: i32) -> String {
     format!("animation-delay:-{delay}s;animation-duration:{}s", fmt(d))
 }
 
+/// One star, already reduced to what `trihex.svg` substitutes verbatim.
+/// `bloom` is the halo radius of the two anchor stars and `None` for the rest,
+/// so the template's `{% if let %}` is the whole of that decision -- it never
+/// counts stars itself. `bloom` and `r` are two separate numbers, not one
+/// scaled twice: the halo is measured off the plain radius and the star only
+/// grows afterwards, an order `space_cell` keeps and the template cannot see.
+struct Star {
+    x: String,
+    y: String,
+    r: String,
+    o: String,
+    bloom: Option<String>,
+}
+
+/// One hexagon of procedural deep space, reduced to substitutable values.
+///
+/// `phase` is ONE field with TWO consumers. `trihex.svg` hands this same
+/// string to the `<g class="win">` holding the stars and to the
+/// `<polygon class="blind">` drawn over it, and the blind exists exactly when
+/// the phase does -- so the window switches off for precisely the span its
+/// own shutter covers it. A separate window phase and blind phase is what
+/// would let the two drift apart and pop a starfield in over a closed blind;
+/// see `blind_phase`. The blind is painted `url(#bg)`, canvas colour, so a
+/// shut one is indistinguishable from any other lattice cell -- which is why
+/// that gradient is `userSpaceOnUse` (see `svg.rs`'s `Defs`).
+///
+/// `rot` is the whole `rotate(...)` transform value rather than the bare
+/// angle: a template may only substitute, so it must not be the thing that
+/// puts the spaces between an angle and the centre it turns about.
+struct VoidCell {
+    cid: String,
+    poly: String,
+    phase: Option<String>,
+    nx: String,
+    ny: String,
+    nrx: String,
+    nry: String,
+    neb: &'static str,
+    rot: String,
+    stars: Vec<Star>,
+}
+
+/// One hexagon of procedural deep space: clipped void ground, a faint nebula,
+/// then seeded stars. Drawn, never embedded -- no assets, crisp at any size.
+///
+/// `phase` (background.motion CLOSEOPEN) is its blind's timing, which makes the
+/// cell switch itself off while that blind covers it. SVG does no occlusion
+/// culling, so without this the stars are repainted every frame under a shut
+/// blind.
+// the reference's own signature (background.py:207); the caller already holds
+// the formatted polygon, so there is nothing here to bundle away
+#[allow(clippy::too_many_arguments)]
+fn space_cell(
+    seed: u32,
+    poly: String,
+    cx: f64,
+    cy: f64,
+    s: f64,
+    r: i32,
+    c: i32,
+    phase: Option<String>,
+) -> VoidCell {
+    let mut g = cell_rng("star", seed, r, c);
+    let cid = format!("sp{r}_{c}"); // cell coords, so ids are stable
+    let (nx, ny) = (cx + (g.random() - 0.5) * s, cy + (g.random() - 0.5) * s);
+    let (nrx, nry) = (s * (0.55 + g.random() * 0.5), s * (0.30 + g.random() * 0.3));
+    let neb = if g.random() < 0.6 { "neba" } else { "nebb" };
+    let ang = g.random() * 180.0;
+    let (nxf, nyf) = (fmt(nx), fmt(ny));
+    let rot = format!("rotate({} {nxf} {nyf})", fmt(ang));
+    let stars = (0..SPACE_STARS)
+        .map(|i| {
+            let x = cx + (g.random() - 0.5) * 2.0 * s;
+            let y = cy + (g.random() - 0.5) * SQRT3 * s;
+            let mut rad = s * (0.008 + g.random().powi(2) * 0.022);
+            let o = 0.35 + g.random() * 0.6;
+            let bloom = if i < 2 {
+                // two anchor stars get a soft bloom, sized off the plain
+                // radius -- the star itself only grows afterwards
+                let b = fmt(rad * 3.5);
+                rad *= 1.4;
+                Some(b)
+            } else {
+                None
+            };
+            Star {
+                x: fmt(x),
+                y: fmt(y),
+                r: fmt(rad),
+                o: fmt(o),
+                bloom,
+            }
+        })
+        .collect();
+    VoidCell {
+        cid,
+        poly,
+        phase,
+        nx: nxf,
+        ny: nyf,
+        nrx: fmt(nrx),
+        nry: fmt(nry),
+        neb,
+        rot,
+        stars,
+    }
+}
+
+/// One triangle. `style` is the complete `animation-delay:...s` value under
+/// background.motion SCAN and `None` otherwise. The `wavef` class it pairs
+/// with is a literal in the template rather than a second field, so there is
+/// nothing here for this `Option` to fall out of agreement with.
+struct TriFill {
+    points: String,
+    col: String,
+    style: Option<String>,
+}
+
+/// A hexagon border's class and its whole `style` value, or neither -- one
+/// field, not two, for the reason `icon.rs`'s `RingMotion` spells out: two
+/// independent `Option`s can be set apart from each other, and the template
+/// would only discover it at render time.
+struct HexAnim {
+    cls: &'static str,
+    style: String,
+}
+
+/// One hexagon border. `fill` and `fill_opacity` do stay two fields, because
+/// only the `light` arm paints a (transparent) fill for its keyframes to
+/// flash up, and an absent `fill_opacity` simply renders nothing -- unlike a
+/// split class/style pair there is no unwrap for them to disagree through.
+struct HexBorder {
+    poly: String,
+    anim: Option<HexAnim>,
+    fill: &'static str,
+    fill_opacity: Option<&'static str>,
+    so: String,
+}
+
+/// The template context for `trihex.svg`. The three vectors render in the
+/// order they are declared, and that order IS the layering: voids sit under
+/// the triangles, so a translucent triangle crossing a window reads as a shard
+/// catching light, and the borders go on top of everything.
+///
+/// `void`, `star`, `fill_o`, `ink` and `sw` are whole-render constants held
+/// once here instead of copied onto every cell, star and hexagon -- at 1080p
+/// that is roughly two thousand hexagons and two thousand stars. There is no
+/// palette `a` beside them: the one element that paints it is the `light`
+/// border, and it carries the colour on `HexBorder::fill` precisely so the
+/// template never has to pick between `a` and `none` itself.
+///
+/// Four of `trihex.svg`'s conditionals wrap an optional *attribute group*
+/// inside an open tag, and each one is written `{% if ... +%} attr="..."
+/// {% endif +%}`. Those `+` markers are load-bearing: `whitespace =
+/// "suppress"` (`askama.toml`) eats whitespace-only text next to a `{% %}`
+/// block, which would run `<polygon` straight into `points` and
+/// `fill="none"` straight into `stroke`. The `+` keeps the one separating
+/// space, and keeps it on the `{% endif %}` so it is emitted whether or not
+/// the branch was taken -- exactly what `<polygon points=...>` needs when
+/// there is no class to announce. `templates/root.svg` hits the same rule
+/// between two `{{ }}` expressions; see `svg.rs`'s `Root`.
+#[derive(askama::Template)]
+#[template(path = "trihex.svg")]
+struct Trihex {
+    voids: Vec<VoidCell>,
+    tris: Vec<TriFill>,
+    hexes: Vec<HexBorder>,
+    void: &'static str,
+    star: &'static str,
+    fill_o: String,
+    ink: &'static str,
+    sw: String,
+}
+
 /// Hexagon lattice (spacing 2s) + sparse triangles under the holder/
 /// intersector rule, styled per the chosen background animation.
 pub fn pat_trihex(w: u32, h: u32, lat: &Lattice, scene: &Scene, rng: &mut PyRandom) -> String {
-    let (a, ink) = (&PAL.a, &PAL.ink);
     let sw = fmt(lat.u * 0.0013);
     let plan = assign(lat, rng);
 
@@ -198,33 +306,24 @@ pub fn pat_trihex(w: u32, h: u32, lat: &Lattice, scene: &Scene, rng: &mut PyRand
     // eager, and it has to stay that way: this loop's `lights` non-void branch
     // draws two values per hex from the global stream, and those draws must
     // land in `lat.hexes` order immediately after `assign()`'s -- not because
-    // of `fills` or `voids`, which never touch the global stream, but because
+    // of `tris` or `voids`, which never touch the global stream, but because
     // any other order here desyncs every hexagon drawn after the first one.
-    let mut out = Vec::with_capacity(lat.hexes.len());
+    let mut hexes = Vec::with_capacity(lat.hexes.len());
     for (r, c) in &lat.hexes {
         let (cx, cy) = lat.center(*r, *c);
         let poly = pts(&regular_poly(cx, cy, lat.s, 6, PI / 6.0));
         let void = space.contains(&(*r, *c));
         if void {
-            let phase = closeopen.then(|| blind_phase(scene.seed, *r, *c));
             voids.push(space_cell(
                 scene.seed,
-                &poly,
+                poly.clone(),
                 cx,
                 cy,
                 lat.s,
                 *r,
                 *c,
-                phase.as_deref(),
+                closeopen.then(|| blind_phase(scene.seed, *r, *c)),
             ));
-            if let Some(phase) = &phase {
-                // canvas-coloured, so a shut blind is indistinguishable from any
-                // other lattice cell -- see the userSpaceOnUse note on #bg
-                voids.push(format!(
-                    "<polygon class=\"blind\" style=\"{phase}\" \
-                     points=\"{poly}\" fill=\"url(#bg)\"/>"
-                ));
-            }
         }
         // A window's border sits brighter than the field to mark the few portals --
         // but under closeopen *every* cell is a portal, so that would just raise the
@@ -234,56 +333,76 @@ pub fn pat_trihex(w: u32, h: u32, lat: &Lattice, scene: &Scene, rng: &mut PyRand
         } else {
             STROKE_O
         };
-        out.push(match scene.motion {
-            background::Motion::Scan => format!(
-                "<polygon class=\"scan\" style=\"animation-delay:{}s\" \
-                 points=\"{poly}\" fill=\"none\" stroke=\"{ink}\" \
-                 stroke-opacity=\"{so}\" stroke-width=\"{sw}\"/>",
-                scan_delay(cx, cy)
+        let (anim, fill, fill_opacity) = match scene.motion {
+            background::Motion::Scan => (
+                Some(HexAnim {
+                    cls: "scan",
+                    style: format!("animation-delay:{}s", scan_delay(cx, cy)),
+                }),
+                "none",
+                None,
             ),
             // border-only pulse: the usual pale fill flash would wash the stars out
             background::Motion::Lights if void => {
                 let delay = fmt(cell_rng("delay", scene.seed, *r, *c).random() * 9.0);
-                format!(
-                    "<polygon class=\"lightb\" style=\"animation-delay:-{delay}s\" \
-                     points=\"{poly}\" fill=\"none\" stroke=\"{ink}\" \
-                     stroke-opacity=\"{so}\" stroke-width=\"{sw}\"/>"
+                (
+                    Some(HexAnim {
+                        cls: "lightb",
+                        style: format!("animation-delay:-{delay}s"),
+                    }),
+                    "none",
+                    None,
                 )
             }
             background::Motion::Lights => {
                 // two draws off the global stream, delay before duration
                 let delay = fmt(rng.random() * 9.0);
                 let dur = fmt(7.0 + rng.random() * 5.0);
-                format!(
-                    "<polygon class=\"light\" style=\"animation-delay:-{delay}s;\
-                     animation-duration:{dur}s\" points=\"{poly}\" fill=\"{a}\" \
-                     fill-opacity=\"0\" stroke=\"{ink}\" stroke-opacity=\"{so}\" \
-                     stroke-width=\"{sw}\"/>"
+                (
+                    Some(HexAnim {
+                        cls: "light",
+                        style: format!("animation-delay:-{delay}s;animation-duration:{dur}s"),
+                    }),
+                    PAL.a.as_str(),
+                    Some("0"),
                 )
             }
-            _ => format!(
-                "<polygon points=\"{poly}\" fill=\"none\" stroke=\"{ink}\" \
-                 stroke-opacity=\"{so}\" stroke-width=\"{sw}\"/>"
-            ),
+            _ => (None, "none", None),
+        };
+        hexes.push(HexBorder {
+            poly,
+            anim,
+            fill,
+            fill_opacity,
+            so: so.to_string(),
         });
     }
 
-    let fills = plan.tris.iter().map(|(v1, v2, apex, col)| {
-        let points = pts(&[*v1, *v2, *apex]);
-        if scene.motion == background::Motion::Scan {
-            let (tx, ty) = ((v1.0 + v2.0 + apex.0) / 3.0, (v1.1 + v2.1 + apex.1) / 3.0);
-            format!(
-                "<polygon class=\"wavef\" style=\"animation-delay:{}s\" \
-                 points=\"{points}\" fill=\"{col}\" fill-opacity=\"{FILL_O}\"/>",
-                scan_delay(tx, ty)
-            )
-        } else {
-            format!("<polygon points=\"{points}\" fill=\"{col}\" fill-opacity=\"{FILL_O}\"/>")
-        }
-    });
-    // voids sit under the triangles, so a translucent triangle crossing a window
-    // reads as a shard catching light; borders go on top of everything.
-    voids.into_iter().chain(fills).chain(out).collect()
+    let tris = plan
+        .tris
+        .iter()
+        .map(|(v1, v2, apex, col)| TriFill {
+            points: pts(&[*v1, *v2, *apex]),
+            col: col.clone(),
+            style: (scene.motion == background::Motion::Scan).then(|| {
+                let (tx, ty) = ((v1.0 + v2.0 + apex.0) / 3.0, (v1.1 + v2.1 + apex.1) / 3.0);
+                format!("animation-delay:{}s", scan_delay(tx, ty))
+            }),
+        })
+        .collect();
+
+    Trihex {
+        voids,
+        tris,
+        hexes,
+        void: VOID.as_str(),
+        star: PAL.bg.0.as_str(),
+        fill_o: FILL_O.to_string(),
+        ink: PAL.ink.as_str(),
+        sw,
+    }
+    .render()
+    .unwrap()
 }
 
 #[cfg(test)]
