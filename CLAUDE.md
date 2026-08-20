@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-`svg_builder` generates a **self-contained, CSS-animated SVG** wallpaper (a hexagon lattice with sparse triangles + a center icon). Everything is one Rust crate, no external assets — even the "space" starfield is drawn as SVG primitives, so output stays small and crisp at any resolution.
+`svg_builder` generates a **self-contained, CSS-animated SVG** wallpaper (a hexagon lattice with sparse triangles + a center icon). Everything is one Rust crate: the askama templates under `templates/` are inlined into the binary at compile time, so nothing is read from disk at runtime, and the rendered SVG itself carries no external assets — even the "space" starfield is drawn as SVG primitives, so output stays small and crisp at any resolution.
 
 ## Commands
 
@@ -44,7 +44,11 @@ drawn after it. Do not swap in a Rust RNG.
 
 **Pure CSS animation, reduced-motion-safe** — animation is `@keyframes` embedded in the SVG (no SMIL, no JS), and every animated element MUST have a resting state that `prefers-reduced-motion` falls back to (the clean static look). `css()` centralizes this.
 
-**Build pipeline** (`svg::build_svg`): `geom::Lattice::new` (the one shared hex grid) → `trihex::pat_trihex` (triangles + optional `space` windows + optional `closeopen` blinds) → `matrix::pat_matrix` (optional character rain) → `icon::ico_hexatri`/`icon::ico_ship` (center glyph) → `style::css` → assemble. Sizes scale with `min(w, h)`, so pattern density is resolution-independent.
+**Build pipeline** (`svg::build_svg`): `geom::Lattice::new` (the one shared hex grid) → `trihex::pat_trihex` (triangles + optional `space` windows + optional `closeopen` blinds, rendered through `templates/trihex.svg`) → `matrix::pat_matrix` (optional character rain, `templates/matrix.svg`) → `icon::ico_hexatri`/`icon::ico_ship` (center glyph, `templates/hexatri.svg`/`templates/ship.svg`) → `style::css` → `templates/defs.svg` (gradients/filter) and `templates/root.svg` (the document shell) assemble the finished page. Sizes scale with `min(w, h)`, so pattern density is resolution-independent.
+
+**The seam between Rust and templates runs one way.** Rust computes every value that reaches a template — seeded RNG draws, geometry, animation phases, pre-formatted style-attribute strings (`geom::fmt`) — and a template only substitutes those complete values into markup. A template never computes a coordinate, never introduces a sign, digit, unit or separator adjacent to an interpolation, and never calls into `rng.rs`. This is what keeps determinism intact: nothing a template does can vary between renders of the same seed, because a template cannot vary anything on its own.
+
+**The escaper is `askama::filters::Text` — the no-op — by deliberate choice.** `askama.toml` registers it for the `.svg` extension. Disabling escaping is normally a defect; it is safe here because every value that reaches a template is either computed internally or validated at the `params` boundary: colours pass `style::hex_rgba` (rejects anything but `#rrggbb`/`#rrggbbaa`), angle/seed/resolution are numbers checked by `params::validate()`, `MATRIX_GLYPHS` deliberately excludes `< > & " '` (`src/style.rs:48`), and the aria label is assembled from fixed literals — so this crate never emits an escapable character anywhere, by design. That is a standing obligation, not a one-time audit: anyone adding a config field that reaches a template must route it through `params::validate()` first, or the `Text` escaper stops being safe.
 
 **`ship` is a solid, not linework.** The hull is tiled by four translucent facets whose *fill steps* carry the relief; the ship's own gradients live in the glyph, not in `build_svg`'s `defs`, because they have exactly one consumer. `icon.rs`'s `the_ship_is_a_folded_solid` checks the facets still tile the hull *by area*, so the cloak cannot move the silhouette, and it asserts against `ico_ship()` alone — matched against a whole page, the lattice supplies polygons that satisfy those patterns by chance. Why the facets are lit and valued the way they are is argued in `ico_ship`'s docstring; read it there.
 

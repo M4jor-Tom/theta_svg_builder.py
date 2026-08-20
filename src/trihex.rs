@@ -158,10 +158,8 @@ struct VoidCell {
 /// One hexagon of procedural deep space: clipped void ground, a faint nebula,
 /// then seeded stars. Drawn, never embedded -- no assets, crisp at any size.
 ///
-/// `phase` (background.motion CLOSEOPEN) is its blind's timing, which makes the
-/// cell switch itself off while that blind covers it. SVG does no occlusion
-/// culling, so without this the stars are repainted every frame under a shut
-/// blind.
+/// `phase` is forwarded straight through to `VoidCell`; see there for why it
+/// exists.
 // the reference's own signature (background.py:207); the caller already holds
 // the formatted polygon, so there is nothing here to bundle away
 #[allow(clippy::too_many_arguments)]
@@ -252,10 +250,13 @@ struct HexBorder {
     so: String,
 }
 
-/// The template context for `trihex.svg`. The three vectors render in the
-/// order they are declared, and that order IS the layering: voids sit under
-/// the triangles, so a translucent triangle crossing a window reads as a shard
-/// catching light, and the borders go on top of everything.
+/// The template context for `trihex.svg`. `templates/trihex.svg` walks
+/// `voids`, then `tris`, then `hexes` as three separate loops in that order,
+/// and THAT -- not the order these fields are declared here -- is what fixes
+/// the layering: voids sit under the triangles, so a translucent triangle
+/// crossing a window reads as a shard catching light, and the borders go on
+/// top of everything. Reordering these fields would change nothing;
+/// reordering the template's loops would silently change the picture.
 ///
 /// `void`, `star`, `fill_o`, `ink` and `sw` are whole-render constants held
 /// once here instead of copied onto every cell, star and hexagon -- at 1080p
@@ -267,13 +268,17 @@ struct HexBorder {
 /// Four of `trihex.svg`'s conditionals wrap an optional *attribute group*
 /// inside an open tag, and each one is written `{% if ... +%} attr="..."
 /// {% endif +%}`. Those `+` markers are load-bearing: `whitespace =
-/// "suppress"` (`askama.toml`) eats whitespace-only text next to a `{% %}`
-/// block, which would run `<polygon` straight into `points` and
-/// `fill="none"` straight into `stroke`. The `+` keeps the one separating
-/// space, and keeps it on the `{% endif %}` so it is emitted whether or not
-/// the branch was taken -- exactly what `<polygon points=...>` needs when
-/// there is no class to announce. `templates/root.svg` hits the same rule
-/// between two `{{ }}` expressions; see `svg.rs`'s `Root`.
+/// "suppress"` (`askama.toml`) trims the whitespace touching a `{% %}` block
+/// whether or not the rest of that text node is itself blank. On the opening
+/// `{% if ... +%}` the text that follows is ` class="win" style="` -- not
+/// whitespace-only -- yet its leading space would still be stripped, running
+/// `<g` into `class`; on `{% endif +%}` it would run `<polygon` straight into
+/// `points` and `fill="none"` straight into `stroke`. Each `+` keeps its one
+/// separating space, and the closing one stays on `{% endif %}` so it is
+/// emitted whether or not the branch was taken -- exactly what
+/// `<polygon points=...>` needs when there is no class to announce.
+/// `templates/root.svg` hits the same rule between two `{{ }}` expressions;
+/// see `svg.rs`'s `Root`.
 #[derive(askama::Template)]
 #[template(path = "trihex.svg")]
 struct Trihex {
