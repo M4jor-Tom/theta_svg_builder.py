@@ -3,7 +3,7 @@
 Generates a self-contained `.svg`: a **hexagon lattice with sparse triangles**
 plus a **center icon**, light theme. Animation is pure CSS (no SMIL, no JS) and
 honours `prefers-reduced-motion` (which falls back to the clean static look).
-One Python file plus a generated protobuf module, no external assets. Sizes scale with `min(width, height)`,
+One Rust crate, no external assets. Sizes scale with `min(width, height)`,
 so pattern density is constant across resolutions.
 
 The graphic mood — and the rules for extending it without breaking it — is
@@ -31,8 +31,7 @@ you try to write one:
 
 ```sh
 $ bgsvg rotate-ship.json
-rotate-ship.json: Failed to parse icon field: Message type "svg_builder.Ship"
-has no field named "motion" at "Parameters.icon.ship". ...
+rotate-ship.json: unknown field `motion`, there are no fields at line 1 column 25
 ```
 
 ## Background images
@@ -89,14 +88,14 @@ the icon).
 ## Run
 
 ```sh
-nix run .#bgsvg                       # renders ./parameters.json
+nix run .#bgsvg                       # the schema's defaults
 nix run .#bgsvg -- path/to/config.json
-python3 background.py --selftest      # invariants
-python3 test/golden.py                # the picture did not change
+nix develop -c cargo test             # invariants
+nix develop -c python3 test/golden.py # the picture did not change
 ```
 
-Without Nix, `background.py` runs on any Python 3 with `protobuf >= 7.35.1` installed
-(the generated `parameters_pb2.py` refuses to import against an older runtime).
+Without Nix: Rust 1.85+ (edition 2024) and `protoc` on `PATH`, then
+`cargo build --release`.
 
 ## Configuration
 
@@ -139,7 +138,7 @@ writing four sizes to a single file is not expressible. `CLOSEOPEN` with
 ## Check
 
 ```sh
-python3 background.py --selftest
+nix develop -c cargo test
 ```
 
 Builds all 42 valid `background.motion` × `background.image` × `icon` ×
@@ -155,13 +154,13 @@ an out-of-range matrix angle, a malformed colour, a malformed resolution,
 malformed JSON, and a missing config file.
 
 ```sh
-python3 test/golden.py            # verify
-python3 test/golden.py --regen    # rewrite after an intended visual change
+nix develop -c python3 test/golden.py            # verify
+nix develop -c python3 test/golden.py --regen    # rewrite after an intended visual change
 ```
 
-`--selftest` says a render is *well-formed*; the golden corpus says it is
-*unchanged*. `test/golden/` holds those same 42 configs, each kept beside the
-SVG it renders:
+`cargo test` says the right code ran and the invariants hold; the golden
+corpus says the picture is unchanged and well-formed. `test/golden/` holds
+those same 42 configs, each kept beside the SVG it renders:
 
 ```
 test/golden/<sha512 of the SVG>/<sha512 of the JSON>_parameters.json

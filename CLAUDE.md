@@ -2,30 +2,28 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-`svg_builder` generates a **self-contained, CSS-animated SVG** wallpaper (a hexagon lattice with sparse triangles + a center icon). Everything is one Python file plus a generated protobuf module, no external assets — even the "space" starfield is drawn as SVG primitives, so output stays small and crisp at any resolution.
+`svg_builder` generates a **self-contained, CSS-animated SVG** wallpaper (a hexagon lattice with sparse triangles + a center icon). Everything is one Rust crate, no external assets — even the "space" starfield is drawn as SVG primitives, so output stays small and crisp at any resolution.
 
 ## Commands
 
 ```sh
-nix run .#bgsvg                       # renders ./parameters.json
+nix run .#bgsvg                       # renders the schema's defaults
 nix run .#bgsvg -- path/to/config.json
-python3 background.py --selftest      # invariants — run after ANY change
-python3 test/golden.py                # the picture did not change (--regen when it should have)
-nix build                             # default package = bgsvg
-nix develop -c protoc --python_out=. parameters.proto   # regenerate _pb2
+nix develop -c cargo test             # invariants — run after ANY change
+nix develop -c python3 test/golden.py # the picture did not change (--regen when it should have)
+nix build                             # default package = bgsvg; runs cargo test
 ```
-Without Nix, `background.py` runs on any Python 3 with `protobuf >= 7.35.1` installed
-(the generated `parameters_pb2.py` refuses to import against an older runtime).
+Without Nix: Rust 1.85+ and `protoc` on `PATH`.
 
-Two tests, and a change is unfinished until both pass. `--selftest` builds all 42 valid `background.motion` × `background.image` × `icon` × `overlay` combinations, parses each as XML, and asserts the invariants below (`selftest`/`_assert_*` in `background.py`) — it says a render is *well-formed*. `test/golden.py` says it is *unchanged*: the same 42 configs live in `test/golden/<sha512 of the SVG>/`, each beside the `<sha512 of the SVG>_background.svg` it renders. One rule covers both files — each is named by the sha512 of its own bytes, exactly as written — so `sha512sum` reproduces every name unaided. The SVG is kept, not just its hash, so a failure reports the first differing byte instead of only a moved hash. Both enumerate from `valid_configs()` rather than each carrying its own loop, so a new axis cannot reach one surface and miss the other — add an enum value and both sweeps grow. It fails on any byte that moves, so run `--regen` when the picture was **meant** to move, and read the diff first — a golden change you did not intend is the regression.
+Two tests, and a change is unfinished until both pass. `cargo test` builds all 42 valid `background.motion` × `background.image` × `icon` × `overlay` combinations, parses each as XML, and asserts the invariants below (`#[test]` functions across `src/` and `tests/`) — it says a render is *well-formed*. `test/golden.py` says it is *unchanged*: the same 42 configs live in `test/golden/<sha512 of the SVG>/`, each beside the `<sha512 of the SVG>_background.svg` it renders. One rule covers both files — each is named by the sha512 of its own bytes, exactly as written — so `sha512sum` reproduces every name unaided. The SVG is kept, not just its hash, so a failure reports the first differing byte instead of only a moved hash. `tests/configs.rs` and `test/golden.py` both enumerate from `bgsvg --configs`, which is `params::valid_configs`, rather than each carrying its own loop, so a new axis cannot reach one surface and miss the other — add an enum value and both sweeps grow. It fails on any byte that moves, so run `--regen` when the picture was **meant** to move, and read the diff first — a golden change you did not intend is the regression.
 
 ## Architecture
 
-`background.py` is the whole program; `flake.nix` just wraps it as the `bgsvg` app. Read `docs/mood/` (README + `matrix.png` + `samples/`) before touching anything visual — it is the graphic-mood contract, and the point is to extend the look without breaking it.
+`src/svg.rs` assembles the page; `src/trihex.rs`, `src/matrix.rs` and `src/icon.rs` draw it; `src/params.rs` is the boundary with the outside world; `src/rng.rs` is why the picture is reproducible. `flake.nix` just wraps the crate as the `bgsvg` app. Read `docs/mood/` (README + `matrix.png` + `samples/`) before touching anything visual — it is the graphic-mood contract, and the point is to extend the look without breaking it.
 
-**One config, one render** — `parameters.json` is the whole input and
-`parameters.proto` is its schema; `--selftest` and the config path are the
-only CLI surface left. **Conditional rules are structural where the model
+**One config, one render** — an optional JSON config path is the whole input
+(no argument renders the schema's defaults) and `parameters.proto` is its
+schema; the config path is the only CLI surface left. **Conditional rules are structural where the model
 allows it, and rejected where it does not.** A motion belongs to the icon that
 declares it (`Hexatri.Motion`; `Ship` declares none, and nothing assumes the
 next glyph rotates), and the matrix angle and colour live inside `Matrix` — so
@@ -37,9 +35,16 @@ rule, try moving a field before adding a check.
 
 **Determinism** — geometry depends ONLY on `seed`; the animation/icon/image/overlay choices never move a hexagon. Same seed ⇒ same layout across every combination. `pat_matrix` gets its own `random.Random` for exactly this reason, and `_assert_matrix` compares every `<polygon>` overlay-on vs overlay-off. Keep new features on this rule so seeds stay stable.
 
+**The RNG is CPython's, deliberately** — `src/rng.rs` reimplements MT19937 with
+Python's string seeding (`int.from_bytes(s + sha512(s))`) and its exact
+`_randbelow`/`shuffle`/`sample` algorithms, because the golden corpus was
+generated by the Python and pins every draw. Each of those consumes a specific
+number of 32-bit words, so a "compatible" shortcut desynchronises everything
+drawn after it. Do not swap in a Rust RNG.
+
 **Pure CSS animation, reduced-motion-safe** — animation is `@keyframes` embedded in the SVG (no SMIL, no JS), and every animated element MUST have a resting state that `prefers-reduced-motion` falls back to (the clean static look). `css()` centralizes this.
 
-**Build pipeline** (`build_svg`): `lattice()` (the one shared hex grid) → `pat_trihex()` (triangles + optional `space` windows + optional `closeopen` blinds) → `pat_matrix()` (optional character rain) → `ico_hexatri()`/`ico_ship()` (center glyph) → `css()` → assemble. Sizes scale with `min(w, h)`, so pattern density is resolution-independent.
+**Build pipeline** (`svg::build_svg`): `geom::Lattice::new` (the one shared hex grid) → `trihex::pat_trihex` (triangles + optional `space` windows + optional `closeopen` blinds) → `matrix::pat_matrix` (optional character rain) → `icon::ico_hexatri`/`icon::ico_ship` (center glyph) → `style::css` → assemble. Sizes scale with `min(w, h)`, so pattern density is resolution-independent.
 
 **`ship` is a solid, not linework.** The hull is tiled by four translucent facets whose *fill steps* carry the relief; the ship's own gradients live in the glyph, not in `build_svg`'s `defs`, because they have exactly one consumer. `_assert_ship` checks the facets still tile the hull *by area*, so the cloak cannot move the silhouette, and it asserts against `ico_ship()` alone — matched against a whole page, the lattice supplies polygons that satisfy those patterns by chance. Why the facets are lit and valued the way they are is argued in `ico_ship`'s docstring; read it there.
 

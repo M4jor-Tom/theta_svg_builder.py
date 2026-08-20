@@ -1,7 +1,54 @@
 //! Animated SVG background builder — trihexagonal blueprint.
 //!
-//! (Task 12 replaces this placeholder with the full module docstring ported
-//! from background.py:1-52.)
+//! A hexagon lattice with sparse equilateral triangles, plus a center icon.
+//! Light theme only. One render is described by one JSON file; parameters.proto
+//! is its schema, and every zero value there is this program's default, so `{}`
+//! is a complete config.
+//!
+//!   background.motion  STATIC     no background animation
+//!                      SCAN       hexagon (and triangle) opacities sweep diagonally
+//!                      LIGHTS     hexagons light their border, then fill, then rest
+//!                      CLOSEOPEN  every hexagon is a window, mostly shut; a few
+//!                                 shrink open onto the image at a time, then close
+//!   background.image   NONE       plain lattice
+//!                      STARFIELD  a few hexagons become windows onto a procedural
+//!                                 starfield
+//!   icon.hexatri       nested hexagon/triangle glyph, motion ROTATE or STATIC
+//!   icon.ship          cloaked delta spaceship: one folded sheet read as four
+//!                      translucent facets under one light. Declares no motion --
+//!                      it is static by design, and nothing assumes the next glyph
+//!                      rotates
+//!   overlay.matrix     columns of characters at `angle` in `color`. The characters
+//!                      never move: a lit head walks down each column into the next
+//!                      fixed glyph while the ones behind it fade out in place
+//!
+//! Two rules that used to be runtime rejections are now unrepresentable: a motion
+//! belongs to the icon that has it (only hexatri declares one), and the matrix
+//! angle and colour live inside the matrix message, so they cannot be written
+//! without rain to steer. The one rule the schema cannot state -- CLOSEOPEN needs
+//! an image to open onto -- is checked in `params::validate`.
+//!
+//! Animation is pure CSS (no SMIL, no JS) and honours prefers-reduced-motion
+//! (which falls back to the clean static look). `prost`, `pbjson`, `serde` and
+//! `sha2` are the only dependencies, and there are no external assets: the
+//! starfield is drawn, not embedded, so output stays a small self-contained
+//! .svg that is crisp at any resolution. Sizes scale with min(w,h) so pattern
+//! density is constant across resolutions.
+//!
+//! Triangle logic: every hexagon is EITHER a "holder" (one of its edges is a
+//! triangle's base) OR an "intersector" (a triangle's tip pokes into it), never
+//! both. Triangles never overlap and never sit behind the center icon.
+//!
+//! Space cells sit fully outside the icon's clear zone, and under LIGHTS they
+//! pulse their border only -- a pale fill flash would wash the stars out.
+//!
+//! Everything except the animations depends only on `seed`, so a given seed
+//! yields the same layout across every background / icon / overlay combination --
+//! the rain draws from its own stream and never moves a hexagon.
+//!
+//! Examples:
+//!   bgsvg                      # the schema's defaults
+//!   bgsvg docs/mood/samples/matrix-hexatri.json
 
 pub mod geom;
 pub mod icon;

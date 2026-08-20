@@ -1,6 +1,6 @@
 # Graphic mood
 
-Reference for anyone — human or agent — extending `background.py`. It records
+Reference for anyone — human or agent — extending the `bgsvg` crate. It records
 *why* the output looks the way it does, so new features join the system instead
 of arriving from a different one.
 
@@ -47,7 +47,7 @@ asks for attention. If a viewer notices the animation as an event, it is wrong.
 
 ## Palette
 
-`background.py` is the source of truth (`PAL`, `VOID`); these are its computed
+`src/style.rs` is the source of truth (`PAL`, `VOID`); these are its computed
 values, listed so you can match them by eye without running anything.
 
 | role | value | notes |
@@ -255,7 +255,7 @@ add a second focal point.
 ## Regenerating
 
 ```sh
-for f in docs/mood/samples/*.json; do python3 background.py "$f"; done
+for f in docs/mood/samples/*.json; do target/release/bgsvg "$f"; done
 ```
 
 The `.svg` files in `samples/` are the live artifacts — open them in a browser to
