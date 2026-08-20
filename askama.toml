@@ -1,0 +1,7 @@
+[general]
+dirs = ["templates"]
+whitespace = "suppress"
+
+[[escaper]]
+path = "askama::filters::Text"
+extensions = ["svg"]

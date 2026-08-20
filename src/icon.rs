@@ -1,6 +1,8 @@
 //! The centre glyph: the hexagon/triangle badge and the ship.
 use std::f64::consts::PI;
 
+use askama::Template;
+
 use crate::geom::{fmt, pts, regular_poly};
 use crate::style::PAL;
 
@@ -44,6 +46,27 @@ pub fn ico_hexatri(rotate: bool) -> String {
     parts
 }
 
+pub struct ShipFacet {
+    pub points: String,
+    pub k: &'static str,
+    pub v: String,
+}
+
+#[derive(askama::Template)]
+#[template(path = "ship.svg")]
+struct Ship {
+    a: &'static str,
+    b: &'static str,
+    lit: &'static str,
+    cy0: String,
+    cy1: String,
+    ramps: Vec<(&'static str, &'static str)>,
+    facets: Vec<ShipFacet>,
+    hull: String,
+    core: String,
+    exhaust: Vec<(i32, i32, String)>,
+}
+
 /// Cloaked delta spaceship on the same 200-unit grid as `ico_hexatri`: a sheet
 /// folded along its spine, read as four facets rather than as an outline. Same
 /// silhouette as ever -- the facets tile the hull quad exactly, so nothing
@@ -80,7 +103,8 @@ pub fn ico_hexatri(rotate: bool) -> String {
 pub fn ico_ship() -> String {
     let (a, b, lit) = (PAL.a.as_str(), PAL.b.as_str(), PAL.bg.0.as_str());
     let (n, r, l, t) = ((0.0, -80.0), (68.0, 46.0), (-68.0, 46.0), (0.0, 20.0));
-    let (kl, kr) = ((-23.8, 29.1), (23.8, 29.1)); // ridge feet, 35% along the trailing edges
+    // ridge feet, 35% along the trailing edges
+    let (kl, kr) = ((-23.8, 29.1), (23.8, 29.1));
     // One source for the crest, so its fade cannot stop landing on its own
     // ends. It starts short of the nose: the hull stroke overdraws the apex,
     // so the highlight emerges from under the point instead of fighting it
@@ -91,59 +115,42 @@ pub fn ico_ship() -> String {
     // planes, which is the thing actually doing the relief. Four gently-lit
     // shards read as one flat smear; four flat-ish planes at four values read
     // as a fold.
-    let ramp: String = [("a", a), ("b", b)]
-        .into_iter()
-        .map(|(k, col)| {
-            format!(
-                "<linearGradient id=\"shp{k}\" gradientUnits=\"userSpaceOnUse\" x1=\"-70\" \
-                 y1=\"-80\" x2=\"70\" y2=\"60\"><stop offset=\"0%\" stop-color=\"{col}\" \
-                 stop-opacity=\"0.5\"/><stop offset=\"100%\" stop-color=\"{col}\"/></linearGradient>"
-            )
-        })
-        .collect();
-    let mut parts = format!(
-        "<defs>{ramp}<linearGradient id=\"shpe\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" \
-         y1=\"{}\" x2=\"0\" y2=\"{}\"><stop offset=\"0%\" stop-color=\"{lit}\" \
-         stop-opacity=\"0.95\"/><stop offset=\"100%\" stop-color=\"{lit}\" \
-         stop-opacity=\"0\"/></linearGradient></defs>",
-        fmt(cy0),
-        fmt(cy1)
-    );
-    for (facet, k, v) in [
+    let ramps: Vec<(&'static str, &'static str)> = vec![("a", a), ("b", b)];
+    let facets = [
         ([n, kl, l], "a", 0.09),
         ([n, t, kl], "b", 0.04),
         ([n, kr, t], "b", 0.28),
         ([n, r, kr], "a", 0.22),
-    ] {
-        parts.push_str(&format!(
-            "<polygon points=\"{}\" fill=\"url(#shp{k})\" fill-opacity=\"{}\"/>",
-            pts(&facet),
-            fmt(v)
-        ));
-    }
-    parts.push_str(&format!(
-        "<line x1=\"0\" y1=\"{}\" x2=\"0\" y2=\"{}\" stroke=\"url(#shpe)\" stroke-width=\"2.2\"/>",
-        fmt(cy0),
-        fmt(cy1)
-    ));
-    parts.push_str(&format!(
-        "<polygon points=\"{}\" fill=\"none\" stroke=\"{a}\" stroke-width=\"3.6\"/>",
-        pts(&[n, r, t, l])
-    ));
-    parts.push_str(&format!(
-        "<polygon points=\"{}\" fill=\"{a}\" fill-opacity=\"0.28\" stroke=\"{a}\" stroke-width=\"2\"/>",
-        pts(&regular_poly(0.0, -22.0, 8.0, 6, PI / 6.0))
-    ));
+    ]
+    .into_iter()
+    .map(|(facet, k, v)| ShipFacet {
+        points: pts(&facet),
+        k,
+        v: fmt(v),
+    })
+    .collect();
+    let hull = pts(&[n, r, t, l]);
+    let core = pts(&regular_poly(0.0, -22.0, 8.0, 6, PI / 6.0));
     // exhaust, aft of the wing roots
-    for (i, (hw, y)) in [(14, 42), (8, 54)].into_iter().enumerate() {
-        let neg_hw = -hw;
-        parts.push_str(&format!(
-            "<line x1=\"{neg_hw}\" y1=\"{y}\" x2=\"{hw}\" y2=\"{y}\" stroke=\"{b}\" \
-             stroke-width=\"2.4\" stroke-opacity=\"{}\"/>",
-            fmt(0.6 - i as f64 * 0.28)
-        ));
+    let exhaust = [(14, 42), (8, 54)]
+        .into_iter()
+        .enumerate()
+        .map(|(i, (hw, y))| (hw, y, fmt(0.6 - i as f64 * 0.28)))
+        .collect();
+    Ship {
+        a,
+        b,
+        lit,
+        cy0: fmt(cy0),
+        cy1: fmt(cy1),
+        ramps,
+        facets,
+        hull,
+        core,
+        exhaust,
     }
-    parts
+    .render()
+    .unwrap()
 }
 
 #[cfg(test)]

@@ -23,7 +23,9 @@
                 ./Cargo.lock
                 ./build.rs
                 ./parameters.proto
+                ./askama.toml
                 ./src
+                ./templates
                 ./tests
               ];
             };
