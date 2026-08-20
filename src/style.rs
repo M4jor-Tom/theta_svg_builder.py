@@ -102,15 +102,17 @@ pub fn hex_rgba(s: &str) -> Result<(String, f64), String> {
     Ok((format!("#{}", rgb.to_lowercase()), alpha as f64 / 255.0))
 }
 
-/// The stylesheet emitted verbatim into every render: `@keyframes` and their
-/// resting classes, all animation and no SMIL/JS, with a
+/// The stylesheet rules emitted verbatim into every render: `@keyframes` and
+/// their resting classes, all animation and no SMIL/JS, with a
 /// `prefers-reduced-motion` override at the end so every animated element has
-/// a static fallback.
+/// a static fallback. Returns the rules alone, with no `<style>` wrapper --
+/// angle brackets don't belong in `src/`, so `root.svg` writes
+/// `<style>{{ css }}</style>` around whatever this returns.
 pub fn css() -> String {
     let (k0, k1, k2, k3) = BLIND_KF;
     let (f0, f1) = MATRIX_KF;
     let (f0, f1) = (f0 as i64, f1 as i64);
-    let mut out = String::from("<style>");
+    let mut out = String::new();
     out.push_str("@keyframes spin{to{transform:rotate(360deg)}}");
     out.push_str("@keyframes rspin{to{transform:rotate(-360deg)}}");
     out.push_str("@keyframes scan{0%,100%{stroke-opacity:.16}50%{stroke-opacity:.62}}");
@@ -175,7 +177,6 @@ pub fn css() -> String {
     .expect("writing to a String");
     out.push_str(".rain{animation:rain var(--d) linear infinite}");
     out.push_str("@media (prefers-reduced-motion:reduce){*{animation:none!important}}");
-    out.push_str("</style>");
     out
 }
 
@@ -209,11 +210,19 @@ mod tests {
         assert!(hex_rgba("#395e53ccc").is_err());
     }
 
-    /// The stylesheet is emitted verbatim into every render; the corpus holds
-    /// the only copy that matters.
+    /// The stylesheet rules are emitted verbatim into every render; the
+    /// corpus holds the only copy that matters. The fixture still carries the
+    /// `<style>` wrapper (it was captured from the whole document), so this
+    /// strips exactly that -- the wrapper itself moved to `root.svg`, not the
+    /// rules `css()` returns.
     #[test]
     fn css_matches_the_corpus() {
         let want = include_str!("../tests/data/style.txt");
-        assert_eq!(css(), want.trim_end_matches('\n'));
+        let rules = want
+            .trim_end_matches('\n')
+            .strip_prefix("<style>")
+            .and_then(|s| s.strip_suffix("</style>"))
+            .expect("the fixture wraps the rules in <style> tags");
+        assert_eq!(css(), rules);
     }
 }

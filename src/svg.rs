@@ -1,5 +1,7 @@
 //! Document assembly: the `<svg>` header, `<defs>`, the stylesheet, and the
 //! three content slots (background pattern, rain overlay, centre glyph).
+use askama::Template;
+
 use crate::geom::{Lattice, fmt};
 use crate::icon::{ico_hexatri, ico_ship};
 use crate::matrix::pat_matrix;
@@ -7,6 +9,52 @@ use crate::params::{Glyph, Scene, background};
 use crate::rng::PyRandom;
 use crate::style::{PAL, css};
 use crate::trihex::pat_trihex;
+
+/// The template context for `defs.svg`: the gradients and filter every render
+/// needs, plus the starfield nebula pair. `nebulae` is empty unless
+/// `scene.image` is `Starfield`, and that alone decides whether the template
+/// emits them -- there is no separate `starfield: bool` next to it, because a
+/// bool that must agree with the vec's length is a second way to say the same
+/// thing, and the two could drift out of sync.
+#[derive(askama::Template)]
+#[template(path = "defs.svg")]
+struct Defs {
+    w04: String,
+    h: String,
+    bg0: &'static str,
+    bg1: &'static str,
+    nebulae: Vec<(&'static str, &'static str)>,
+}
+
+/// The template context for `root.svg`: the document shell wrapped around the
+/// three content slots (`bg`, `rain`, `glyph`) that the pattern, overlay and
+/// icon builders already reduced to complete markup. Every field is a
+/// `String` (or `&'static str`) Rust finished assembling before the struct
+/// existed -- the template only places them, it never formats a number,
+/// derives a unit or picks a sign.
+///
+/// `templates/root.svg` ends in two newlines, not one: askama always trims
+/// exactly one trailing newline off a rendered template, so a file ending in
+/// a single `\n` would render with none. The original `format!` ended its
+/// output in `</svg>\n`, and the golden corpus is byte-exact against that, so
+/// the second newline is load-bearing -- collapsing it back to one silently
+/// drops the render's last byte.
+#[derive(askama::Template)]
+#[template(path = "root.svg")]
+struct Root {
+    ws: String,
+    hs: String,
+    cx: String,
+    cy: String,
+    clear_r: String,
+    k: String,
+    label: String,
+    defs: String,
+    css: String,
+    bg: String,
+    rain: String,
+    glyph: String,
+}
 
 /// Port of `background.py:548-594`. Layout depends only on `scene.seed`, never
 /// on motion/image/glyph/overlay -- the RNG is seeded first for exactly that
@@ -16,40 +64,23 @@ pub fn build_svg(w: u32, h: u32, scene: &Scene) -> String {
     let lat = Lattice::new(w, h);
     let (u, clear_r) = (lat.u, lat.clear_r);
 
-    let mut defs = vec![
-        // userSpaceOnUse so any shape can paint canvas: the default objectBoundingBox
-        // would squeeze the whole ramp into a single hexagon, and a closed blind
-        // (background.motion CLOSEOPEN) would read as a patch instead of vanishing into the page.
-        format!(
-            "<linearGradient id=\"bg\" gradientUnits=\"userSpaceOnUse\" x1=\"0\" y1=\"0\" \
-             x2=\"{}\" y2=\"{}\"><stop offset=\"0%\" stop-color=\"{}\"/>\
-             <stop offset=\"100%\" stop-color=\"{}\"/></linearGradient>",
-            fmt(w as f64 * 0.4),
-            fmt(h as f64),
-            PAL.bg.0,
-            PAL.bg.1
-        ),
-        "<radialGradient id=\"vig\"><stop offset=\"55%\" stop-color=\"#8fa3b8\" stop-opacity=\"0\"/>\
-         <stop offset=\"100%\" stop-color=\"#8fa3b8\" stop-opacity=\"0.16\"/></radialGradient>"
-            .to_string(),
-        format!(
-            "<radialGradient id=\"halo\"><stop offset=\"0%\" stop-color=\"{0}\" stop-opacity=\"0.92\"/>\
-             <stop offset=\"55%\" stop-color=\"{0}\" stop-opacity=\"0.65\"/>\
-             <stop offset=\"100%\" stop-color=\"{0}\" stop-opacity=\"0\"/></radialGradient>",
-            PAL.bg.0
-        ),
-        "<filter id=\"ink\" x=\"-30%\" y=\"-30%\" width=\"160%\" height=\"160%\">\
-         <feDropShadow dx=\"0\" dy=\"2\" stdDeviation=\"3\" flood-color=\"#1e293b\" flood-opacity=\"0.25\"/></filter>"
-            .to_string(),
-    ];
-    if scene.image == background::Image::Starfield {
-        for (gid, col) in [("neba", "#6fb7d1"), ("nebb", "#77c9a6")] {
-            defs.push(format!(
-                "<radialGradient id=\"{gid}\"><stop offset=\"0%\" stop-color=\"{col}\" stop-opacity=\"0.3\"/>\
-                 <stop offset=\"100%\" stop-color=\"{col}\" stop-opacity=\"0\"/></radialGradient>"
-            ));
-        }
+    // userSpaceOnUse so any shape can paint canvas: the default objectBoundingBox
+    // would squeeze the whole ramp into a single hexagon, and a closed blind
+    // (background.motion CLOSEOPEN) would read as a patch instead of vanishing into the page.
+    let nebulae = if scene.image == background::Image::Starfield {
+        vec![("neba", "#6fb7d1"), ("nebb", "#77c9a6")]
+    } else {
+        Vec::new()
+    };
+    let defs = Defs {
+        w04: fmt(w as f64 * 0.4),
+        h: fmt(h as f64),
+        bg0: PAL.bg.0.as_str(),
+        bg1: PAL.bg.1.as_str(),
+        nebulae,
     }
+    .render()
+    .unwrap();
 
     let bg_svg = pat_trihex(w, h, &lat, scene, &mut rng);
     // between the pattern and the halo, so the halo subtracts the rain around
@@ -64,10 +95,6 @@ pub fn build_svg(w: u32, h: u32, scene: &Scene) -> String {
     };
     let (ws, hs) = (fmt(w as f64), fmt(h as f64));
     let (cx, cy) = (fmt(w as f64 / 2.0), fmt(h as f64 / 2.0));
-    let icon_svg = format!(
-        "<g transform=\"translate({cx},{cy}) scale({})\" filter=\"url(#ink)\">{glyph}</g>",
-        fmt(k)
-    );
 
     let ship = matches!(scene.glyph, Glyph::Ship);
     let mut label = if ship {
@@ -86,19 +113,23 @@ pub fn build_svg(w: u32, h: u32, scene: &Scene) -> String {
     if scene.overlay.is_some() {
         label.push_str(", with streams of characters drifting across it");
     }
-    let defs = defs.join("");
-    let css = css();
-    let clear_r = fmt(clear_r);
 
-    format!(
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {ws} {hs}\" width=\"{ws}\" height=\"{hs}\" \
-         preserveAspectRatio=\"xMidYMid slice\" role=\"img\" aria-label=\"{label}\"><title>{label}</title>\
-         <defs>{defs}</defs>{css}\
-         <rect width=\"{ws}\" height=\"{hs}\" fill=\"url(#bg)\"/>\
-         <g>{bg_svg}</g>{rain_svg}\
-         <circle cx=\"{cx}\" cy=\"{cy}\" r=\"{clear_r}\" fill=\"url(#halo)\"/>\
-         <rect width=\"{ws}\" height=\"{hs}\" fill=\"url(#vig)\"/>{icon_svg}</svg>\n"
-    )
+    Root {
+        ws,
+        hs,
+        cx,
+        cy,
+        clear_r: fmt(clear_r),
+        k: fmt(k),
+        label,
+        defs,
+        css: css(),
+        bg: bg_svg,
+        rain: rain_svg,
+        glyph,
+    }
+    .render()
+    .unwrap()
 }
 
 #[cfg(test)]
