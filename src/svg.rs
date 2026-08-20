@@ -50,7 +50,7 @@ pub fn build_svg(w: u32, h: u32, scene: &Scene) -> String {
         }
     }
 
-    let bg_svg = pat_trihex(&lat, &mut rng);
+    let bg_svg = pat_trihex(w, h, &lat, scene, &mut rng);
     let rain_svg = String::new();
     let k = u * 0.34 / 200.0;
     let glyph = match scene.glyph {
