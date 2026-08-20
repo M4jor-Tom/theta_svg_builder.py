@@ -10,24 +10,35 @@ use crate::style::PAL;
 /// stroke width, stroke opacity, rotate-origin-y%.
 type Ring = (f64, usize, f64, &'static str, f64, f64, Option<f64>);
 
+/// A ring's class and its whole `style` attribute value, or neither -- one
+/// field, not two, because the two strings are only ever meaningful together.
+/// `cls` picks `rspin` vs `spin` by ring index; `style` is the complete
+/// `animation-duration:...;transform-origin:...` value, already assembled
+/// (`24 - idx * 3` for the duration, the ring table's `oy` for the origin).
+/// Splitting this into `cls: Option<&str>` plus a separate `style:
+/// Option<String>` would let a future edit set one without the other -- it
+/// would still compile, and the template's `.unwrap()` on the other field
+/// would only fail at render time, pointing into generated code instead of
+/// at the actual bug. One `Option<RingMotion>` makes "both or neither"
+/// structural instead of a convention the next reader has to keep by hand.
+struct RingMotion {
+    cls: &'static str,
+    style: String,
+}
+
 /// One ring of `hexatri.svg`'s badge, already reduced to what the template
 /// substitutes verbatim. `swd`/`o` are `String`, pre-rendered through `fmt`,
 /// not the `f64`s the ring table holds -- a template may only substitute, so
-/// letting it format a float would hand it a say over the glyph's bytes. `cls`
-/// and `style` travel together and are built here, not in the template: the
-/// class name picks `rspin` vs `spin` by ring index, and `style` is the whole
-/// `animation-duration:...;transform-origin:...` value, already assembled
-/// (`24 - idx * 3` for the duration, the ring table's `oy` for the origin) --
-/// `None` for both when the ring doesn't rotate or `rotate` is false, so the
-/// template's `{% if let %}` is the only conditional left, never an
+/// letting it format a float would hand it a say over the glyph's bytes.
+/// `motion` is `None` when the ring doesn't rotate or `rotate` is false, so
+/// the template's `{% if let %}` is the only conditional left, never an
 /// assembler.
 struct HexRing {
     points: String,
     col: &'static str,
     swd: String,
     o: String,
-    cls: Option<&'static str>,
-    style: Option<String>,
+    motion: Option<RingMotion>,
 }
 
 /// The template context for `hexatri.svg`: the four rings plus the solid
@@ -56,26 +67,20 @@ pub fn ico_hexatri(rotate: bool) -> String {
         .into_iter()
         .enumerate()
         .map(|(idx, (r, n, rot, col, swd, o, oy))| {
-            let (cls, style) = match oy.filter(|_| rotate) {
-                Some(oy) => {
-                    let cls = if idx == 1 { "rspin" } else { "spin" };
-                    let dur = 24 - idx * 3;
-                    (
-                        Some(cls),
-                        Some(format!(
-                            "animation-duration:{dur}s;transform-origin:50% {oy}%"
-                        )),
-                    )
+            let motion = oy.filter(|_| rotate).map(|oy| {
+                let cls = if idx == 1 { "rspin" } else { "spin" };
+                let dur = 24 - idx * 3;
+                RingMotion {
+                    cls,
+                    style: format!("animation-duration:{dur}s;transform-origin:50% {oy}%"),
                 }
-                None => (None, None),
-            };
+            });
             HexRing {
                 points: pts(&regular_poly(0.0, 0.0, r, n, rot)),
                 col,
                 swd: fmt(swd),
                 o: fmt(o),
-                cls,
-                style,
+                motion,
             }
         })
         .collect();
