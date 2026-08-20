@@ -133,11 +133,13 @@ struct Star {
 /// string to the `<g class="win">` holding the stars and to the
 /// `<polygon class="blind">` drawn over it, and the blind exists exactly when
 /// the phase does -- so the window switches off for precisely the span its
-/// own shutter covers it. A separate window phase and blind phase is what
-/// would let the two drift apart and pop a starfield in over a closed blind;
-/// see `blind_phase`. The blind is painted `url(#bg)`, canvas colour, so a
-/// shut one is indistinguishable from any other lattice cell -- which is why
-/// that gradient is `userSpaceOnUse` (see `svg.rs`'s `Defs`).
+/// own shutter covers it. Switching off at all is the point: SVG does no
+/// occlusion culling, so without it every star under a shut blind is
+/// repainted each frame for nothing. A separate window phase and blind
+/// phase is what would let the two drift apart and pop a starfield in over a
+/// closed blind; see `blind_phase`. The blind is painted `url(#bg)`, canvas
+/// colour, so a shut one is indistinguishable from any other lattice cell --
+/// which is why that gradient is `userSpaceOnUse` (see `svg.rs`'s `Defs`).
 ///
 /// `rot` is the whole `rotate(...)` transform value rather than the bare
 /// angle: a template may only substitute, so it must not be the thing that
@@ -410,7 +412,7 @@ pub fn pat_trihex(w: u32, h: u32, lat: &Lattice, scene: &Scene, rng: &mut PyRand
         sw,
     }
     .render()
-    .unwrap()
+    .expect("writing to a String")
 }
 
 #[cfg(test)]

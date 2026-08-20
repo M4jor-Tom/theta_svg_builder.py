@@ -85,19 +85,21 @@ pub fn ico_hexatri(rotate: bool) -> String {
         })
         .collect();
     let core = pts(&regular_poly(0.0, 0.0, 16.0, 6, PI / 6.0));
-    Hexatri { rings, a, core }.render().unwrap()
+    Hexatri { rings, a, core }
+        .render()
+        .expect("writing to a String")
 }
 
 /// One shaded facet, already reduced to what `ship.svg` substitutes verbatim:
-/// the polygon's `points`, which palette ramp it sits under (`k`, matching
-/// the `id="shp{k}"` gradient `ico_ship` builds for the same key), and its
-/// `fill-opacity`. `v` is a `String`, pre-rendered through `fmt`, not the
-/// `f64` it started as -- see `Ship`'s docstring for why that is not
-/// optional.
-pub struct ShipFacet {
-    pub points: String,
-    pub k: &'static str,
-    pub v: String,
+/// the polygon's `points`, which palette `ramp` it sits under (matching the
+/// `id="shp{ramp}"` gradient `ico_ship` builds for the same key), and its
+/// `opacity`, which lands on `fill-opacity`. `opacity` is a `String`,
+/// pre-rendered through `fmt`, not the `f64` it started as -- see `Ship`'s
+/// docstring for why that is not optional.
+struct ShipFacet {
+    points: String,
+    ramp: &'static str,
+    opacity: String,
 }
 
 /// One exhaust streak. `x1`/`x2` are both stored, even though `x1 == -x2`,
@@ -193,10 +195,10 @@ pub fn ico_ship() -> String {
         ([n, r, kr], "a", 0.22),
     ]
     .into_iter()
-    .map(|(facet, k, v)| ShipFacet {
+    .map(|(facet, ramp, opacity)| ShipFacet {
         points: pts(&facet),
-        k,
-        v: fmt(v),
+        ramp,
+        opacity: fmt(opacity),
     })
     .collect();
     let hull = pts(&[n, r, t, l]);
@@ -225,7 +227,7 @@ pub fn ico_ship() -> String {
         exhaust,
     }
     .render()
-    .unwrap()
+    .expect("writing to a String")
 }
 
 #[cfg(test)]

@@ -142,7 +142,7 @@ pub fn pat_matrix(w: u32, h: u32, lat: &Lattice, seed: u32, angle: f64, color: &
         columns,
     }
     .render()
-    .unwrap()
+    .expect("writing to a String")
 }
 
 #[cfg(test)]
