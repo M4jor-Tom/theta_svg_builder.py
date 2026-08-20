@@ -29,11 +29,16 @@
 //! an image to open onto -- is checked in `params::validate`.
 //!
 //! Animation is pure CSS (no SMIL, no JS) and honours prefers-reduced-motion
-//! (which falls back to the clean static look). `prost`, `pbjson`, `serde` and
-//! `sha2` are the only dependencies, and there are no external assets: the
-//! starfield is drawn, not embedded, so output stays a small self-contained
-//! .svg that is crisp at any resolution. Sizes scale with min(w,h) so pattern
-//! density is constant across resolutions.
+//! (which falls back to the clean static look). It runs on six crates --
+//! `askama`, `prost`, `pbjson`, `serde`, `serde_json` and `sha2`, next to the
+//! `prost-build`/`pbjson-build` pair that compiles the schema and is gone by
+//! run time -- and `askama` is the one that shapes the source tree: every SVG
+//! element lives in a template under `templates/`, inlined into the binary at
+//! compile time, so nothing is read from disk at runtime. There are no
+//! external assets either -- the starfield is drawn, not embedded -- so
+//! output stays a small self-contained .svg that is crisp at any resolution.
+//! Sizes scale with min(w,h) so pattern density is constant across
+//! resolutions.
 //!
 //! Triangle logic: every hexagon is EITHER a "holder" (one of its edges is a
 //! triangle's base) OR an "intersector" (a triangle's tip pokes into it), never
