@@ -208,13 +208,18 @@ mod tests {
             .collect()
     }
 
-    /// The one silhouette outline: the Rust of `background.py:958`.
+    /// The one silhouette outline: the Rust of `background.py:958-959`.
     fn hull_poly(glyph: &str) -> Vec<(f64, f64)> {
-        let tag = polygons(glyph)
+        let hulls: Vec<&str> = polygons(glyph)
             .into_iter()
-            .find(|tag| tag.contains("fill=\"none\""))
-            .expect("the hull outline");
-        parse_points(attr(tag, "points"))
+            .filter(|tag| tag.contains("fill=\"none\""))
+            .collect();
+        assert_eq!(
+            hulls.len(),
+            1,
+            "the ship needs exactly one silhouette outline"
+        );
+        parse_points(attr(hulls[0], "points"))
     }
 
     /// The ship must read as a folded solid: four facets that tile the hull
@@ -248,6 +253,16 @@ mod tests {
             glyph.matches(r#"gradientUnits="userSpaceOnUse""#).count(),
             "a facet ramp restarts inside its facet, so that facet is lit on its own"
         );
+    }
+
+    /// `background.py:958-959` asserts `len(hull) == 1` before indexing it --
+    /// a second silhouette outline must fail loudly, not silently pick the
+    /// first one and let a regressed hull area slip through undetected.
+    #[test]
+    #[should_panic(expected = "the ship needs exactly one silhouette outline")]
+    fn hull_poly_rejects_a_second_silhouette() {
+        let glyph = r#"<polygon points="0,0 1,0 1,1" fill="none"/><polygon points="2,2 3,2 3,3" fill="none"/>"#;
+        hull_poly(glyph);
     }
 
     /// rotate is hexatri's own animation: the two triangle rings counter-spin
