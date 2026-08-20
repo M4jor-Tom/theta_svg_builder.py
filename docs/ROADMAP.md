@@ -6,4 +6,5 @@
 
 # Planned
 
+- [ ] SVG / RS split refactor
 - [ ] UI
