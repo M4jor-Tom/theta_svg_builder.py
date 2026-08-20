@@ -13,40 +13,64 @@ trust this program to check its own work:
     nix run .#bgsvg -- test/golden/<D>/<F>_parameters.json
     sha512sum out/trihex-*.svg                              -> D
 
-`--selftest` asserts the invariants a render must satisfy; this asserts the
-render did not change at all. Keeping the SVG rather than only its hash is
-what lets a failure say *what* moved instead of just *that* something did.
+`cargo test` asserts the invariants a render must satisfy; this asserts the
+render did not change at all, and parses each one as XML on the way past.
+Keeping the SVG rather than only its hash is what lets a failure say *what*
+moved instead of just *that* something did.
 
-    nix develop -c python3 test/golden.py            # verify
-    nix develop -c python3 test/golden.py --regen    # rewrite after an intended change
+    cargo build --release && python3 test/golden.py    # verify
+    python3 test/golden.py --regen                     # rewrite after an intended change
 """
 import argparse
 import hashlib
-import json
 import os
 import shutil
+import subprocess
 import sys
+import tempfile
+from xml.dom.minidom import parseString
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import background as bg          # noqa: E402
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def bgsvg():
+    """The renderer under test: $BGSVG, else a cargo target, else PATH."""
+    for c in (os.environ.get("BGSVG"),
+              os.path.join(REPO, "target", "release", "bgsvg"),
+              os.path.join(REPO, "target", "debug", "bgsvg")):
+        if c and os.access(c, os.X_OK):
+            return c
+    found = shutil.which("bgsvg")
+    if found:
+        return found
+    sys.exit("no bgsvg binary: run `cargo build` or set $BGSVG")
+
+
+def bgsvg_run(args, cwd=None):
+    p = subprocess.run([bgsvg(), *args], cwd=cwd, capture_output=True, text=True)
+    if p.returncode:
+        sys.exit(f"bgsvg {' '.join(args)} exited {p.returncode}: {p.stderr.strip()}")
+    return p.stdout
+
+
+def configs():
+    """The corpus's contract with the renderer. The enumeration lives in Rust so
+    that a new enum value grows this corpus and the cargo tests together --
+    describing the axes twice is how one surface silently stops covering them."""
+    return [line for line in bgsvg_run(["--configs"]).splitlines() if line]
+
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "golden")
 JSON_SUFFIX = "_parameters.json"
 SVG_SUFFIX = "_background.svg"
 SIZE = (1920, 1080)              # the schema default; the goldens carry no output key
-# seed 0 and no output key on purpose: geometry depends only on the seed, and
-# the sink picks a destination rather than pixels, so holding both fixed keeps
-# the corpus to the axes that actually change the SVG.
-SEED = 0
 
 
-def canon(obj):
-    """The bytes that land on disk. Sorted and minified so one message can only
-    ever hash one way; enum names written out in full rather than elided as
-    proto3 defaults, so a golden still says what it tests when you read it. One
-    trailing newline keeps it a POSIX text file without breaking the name, since
-    the name hashes these bytes and not some other rendering of them."""
-    return (json.dumps(obj, sort_keys=True, separators=(",", ":")) + "\n").encode()
+def canon(line):
+    """The bytes that land on disk: exactly what --configs printed, plus the
+    trailing newline that keeps it a POSIX text file. The name hashes these
+    bytes and not some other rendering of them."""
+    return (line + "\n").encode()
 
 
 def sha(blob):
@@ -64,23 +88,26 @@ def text(blob):
     return blob.decode().strip()
 
 
-def render(obj):
-    return bg.build_svg(*SIZE, **bg.resolve(bg.validate(bg.parse(obj)))).encode()
+def render(line):
+    """Run the binary on this config in a scratch directory. The config carries
+    no output key, so the default sink writes one SVG under ./out and prints the
+    path it wrote."""
+    with tempfile.TemporaryDirectory() as d:
+        cfg = os.path.join(d, "parameters.json")
+        with open(cfg, "w") as f:
+            f.write(line)
+        out = bgsvg_run([cfg], cwd=d).strip()
+        svg = read(os.path.join(d, out))
+    parseString(svg)          # well-formed, not merely unchanged
+    return svg
 
 
 def corpus():
-    """{JSON hash: (JSON bytes, SVG bytes)} -- the corpus as it should exist.
-
-    Keyed by the JSON hash because that, not the path, is a config's identity:
-    a renderer change moves a config to a new directory, and matching on the
-    key is what lets verify() name the one config that changed rather than a
-    missing file plus an unrelated stale one. The SVG hash is not stored: it is
-    sha(SVG bytes), and keeping a second copy of a derivable value is how the
-    two drift apart."""
+    """{JSON hash: (JSON bytes, SVG bytes)} -- the corpus as it should exist."""
     out, n = {}, 0
-    for cfg in bg.valid_configs(SEED):
-        blob = canon(cfg)
-        out[sha(blob)] = (blob, render(cfg))
+    for line in configs():
+        blob = canon(line)
+        out[sha(blob)] = (blob, render(line))
         n += 1
     assert len(out) == n, "two configs serialised to the same JSON"
     return out
