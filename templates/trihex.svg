@@ -1,1 +1,19 @@
-{% for v in voids %}<clipPath id="{{ v.cid }}"><polygon points="{{ v.poly }}"/></clipPath><g{% if let Some(p) = v.phase +%} class="win" style="{{ p }}"{% endif +%} clip-path="url(#{{ v.cid }})"><polygon points="{{ v.poly }}" fill="{{ void }}"/><ellipse cx="{{ v.nx }}" cy="{{ v.ny }}" rx="{{ v.nrx }}" ry="{{ v.nry }}" fill="url(#{{ v.neb }})" transform="{{ v.rot }}"/>{% for s in v.stars %}{% if let Some(b) = s.bloom %}<circle cx="{{ s.x }}" cy="{{ s.y }}" r="{{ b }}" fill="{{ star }}" fill-opacity="0.12"/>{% endif %}<circle cx="{{ s.x }}" cy="{{ s.y }}" r="{{ s.r }}" fill="{{ star }}" fill-opacity="{{ s.o }}"/>{% endfor %}</g>{% if let Some(p) = v.phase %}<polygon class="blind" style="{{ p }}" points="{{ v.poly }}" fill="url(#bg)"/>{% endif %}{% endfor %}{% for t in tris %}<polygon{% if let Some(s) = t.style +%} class="wavef" style="{{ s }}"{% endif +%} points="{{ t.points }}" fill="{{ t.col }}" fill-opacity="{{ fill_o }}"/>{% endfor %}{% for hx in hexes %}<polygon{% if let Some(a) = hx.anim +%} class="{{ a.cls }}" style="{{ a.style }}"{% endif +%} points="{{ hx.poly }}" fill="{{ hx.fill }}"{% if let Some(o) = hx.fill_opacity +%} fill-opacity="{{ o }}"{% endif +%} stroke="{{ ink }}" stroke-opacity="{{ hx.so }}" stroke-width="{{ sw }}"/>{% endfor %}
+{% for v in voids %}
+  <clipPath id="{{ v.cid }}"><polygon points="{{ v.poly }}"/></clipPath><g{% if let Some(p) = v.phase +%} class="win" style="{{ p }}"{% endif +%} clip-path="url(#{{ v.cid }})"><polygon points="{{ v.poly }}" fill="{{ void }}"/><ellipse cx="{{ v.nx }}" cy="{{ v.ny }}" rx="{{ v.nrx }}" ry="{{ v.nry }}" fill="url(#{{ v.neb }})" transform="{{ v.rot }}"/>
+  {% for s in v.stars %}
+    {% if let Some(b) = s.bloom %}
+      <circle cx="{{ s.x }}" cy="{{ s.y }}" r="{{ b }}" fill="{{ star }}" fill-opacity="0.12"/>
+    {% endif %}
+    <circle cx="{{ s.x }}" cy="{{ s.y }}" r="{{ s.r }}" fill="{{ star }}" fill-opacity="{{ s.o }}"/>
+  {% endfor %}
+  </g>
+  {% if let Some(p) = v.phase %}
+    <polygon class="blind" style="{{ p }}" points="{{ v.poly }}" fill="url(#bg)"/>
+  {% endif %}
+{% endfor %}
+{% for t in tris %}
+  <polygon{% if let Some(s) = t.style +%} class="wavef" style="{{ s }}"{% endif +%} points="{{ t.points }}" fill="{{ t.col }}" fill-opacity="{{ fill_o }}"/>
+{% endfor %}
+{% for hx in hexes %}
+  <polygon{% if let Some(a) = hx.anim +%} class="{{ a.cls }}" style="{{ a.style }}"{% endif +%} points="{{ hx.poly }}" fill="{{ hx.fill }}"{% if let Some(o) = hx.fill_opacity +%} fill-opacity="{{ o }}"{% endif +%} stroke="{{ ink }}" stroke-opacity="{{ hx.so }}" stroke-width="{{ sw }}"/>
+{% endfor %}

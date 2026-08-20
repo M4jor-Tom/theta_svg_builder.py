@@ -1,2 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="{{ view_box }}" width="{{ ws }}" height="{{ hs }}" preserveAspectRatio="xMidYMid slice" role="img" aria-label="{{ label }}"><title>{{ label }}</title><defs>{{ defs }}</defs><style>{{ css }}</style><rect width="{{ ws }}" height="{{ hs }}" fill="url(#bg)"/><g>{{ bg }}</g>{{ rain }}<circle cx="{{ cx }}" cy="{{ cy }}" r="{{ clear_r }}" fill="url(#halo)"/><rect width="{{ ws }}" height="{{ hs }}" fill="url(#vig)"/><g transform="{{ icon_transform }}" filter="url(#ink)">{{ glyph }}</g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="{{ view_box }}" width="{{ ws }}" height="{{ hs }}" preserveAspectRatio="xMidYMid slice" role="img" aria-label="{{ label }}"><title>{{ label }}</title><defs>
+{{ defs }}
+</defs><style>
+{{ css }}
+</style><rect width="{{ ws }}" height="{{ hs }}" fill="url(#bg)"/><g>
+{{ bg }}
+</g>
+{{ rain }}
+<circle cx="{{ cx }}" cy="{{ cy }}" r="{{ clear_r }}" fill="url(#halo)"/><rect width="{{ ws }}" height="{{ hs }}" fill="url(#vig)"/><g transform="{{ icon_transform }}" filter="url(#ink)">
+{{ glyph }}
+</g></svg>
 
