@@ -84,7 +84,7 @@ different design; keeping it in the blue-slate family makes it a window.
 The one glyph that is a *solid* rather than linework: a sheet folded along its
 spine, read as four facets — lit wing, lit ridge face, shadowed ridge face,
 shadowed wing. The silhouette is exactly the old one; the facets tile the hull
-quad, which `_assert_ship` checks by area so the cloak can never quietly move it.
+quad, which `icon.rs`'s `the_ship_is_a_folded_solid` checks by area so the cloak can never quietly move it.
 
 Three constraints hold it inside the five rules. *How* each one is achieved is
 argued in `ico_ship`'s docstring; what matters here is why the mood needs them:

@@ -195,9 +195,11 @@ pub fn pat_trihex(w: u32, h: u32, lat: &Lattice, scene: &Scene, rng: &mut PyRand
     };
 
     let mut voids = Vec::new();
-    // eager, and it has to stay that way: the `lights` non-void branch draws
-    // from the global stream, so deferring this loop past `fills` would reorder
-    // the draws and move every hexagon.
+    // eager, and it has to stay that way: this loop's `lights` non-void branch
+    // draws two values per hex from the global stream, and those draws must
+    // land in `lat.hexes` order immediately after `assign()`'s -- not because
+    // of `fills` or `voids`, which never touch the global stream, but because
+    // any other order here desyncs every hexagon drawn after the first one.
     let mut out = Vec::with_capacity(lat.hexes.len());
     for (r, c) in &lat.hexes {
         let (cx, cy) = lat.center(*r, *c);

@@ -90,6 +90,7 @@ the icon).
 ```sh
 nix run .#bgsvg                       # the schema's defaults
 nix run .#bgsvg -- path/to/config.json
+nix run .#bgsvg -- --configs          # dump the 42-config corpus as JSON lines
 nix develop -c cargo test             # invariants
 nix develop -c python3 test/golden.py # the picture did not change
 ```
@@ -142,7 +143,7 @@ nix develop -c cargo test
 ```
 
 Builds all 42 valid `background.motion` × `background.image` × `icon` ×
-`overlay` combinations, parses each as XML and asserts the invariants:
+`overlay` combinations and asserts the invariants:
 holder/intersector roles, the clear center, space-cell clearance and their
 opt-out of the fill flash, one blind per window layered *under* the
 triangles, every window sharing its own blind's phase, blinds and windows

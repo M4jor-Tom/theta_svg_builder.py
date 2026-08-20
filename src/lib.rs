@@ -161,7 +161,7 @@ pub fn run(args: &[String]) -> i32 {
         }
         [a] => (a.clone(), std::fs::read_to_string(a).map_err(Error::Io)),
         _ => {
-            eprintln!("usage: bgsvg [config.json]");
+            eprintln!("usage: bgsvg [config.json | --configs]");
             return 2;
         }
     };

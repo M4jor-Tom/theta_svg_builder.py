@@ -134,6 +134,7 @@ pub fn ico_ship() -> String {
         "<polygon points=\"{}\" fill=\"{a}\" fill-opacity=\"0.28\" stroke=\"{a}\" stroke-width=\"2\"/>",
         pts(&regular_poly(0.0, -22.0, 8.0, 6, PI / 6.0))
     ));
+    // exhaust, aft of the wing roots
     for (i, (hw, y)) in [(14, 42), (8, 54)].into_iter().enumerate() {
         let neg_hw = -hw;
         parts.push_str(&format!(

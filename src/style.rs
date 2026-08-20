@@ -193,6 +193,13 @@ mod tests {
         assert_eq!(*VOID, "#16212a");
     }
 
+    // half-to-even, not half-away-from-zero: 2.5 -> 2. No palette colour lands on a
+    // tie, so neither the goldens nor PAL can detect a regression to f64::round.
+    #[test]
+    fn mix_rounds_ties_to_even() {
+        assert_eq!(mix("#000000", "#050505", 0.5), "#020202");
+    }
+
     #[test]
     fn hex_rgba_splits_colour_and_alpha() {
         assert_eq!(hex_rgba("#8899AA").unwrap(), ("#8899aa".into(), 1.0));
