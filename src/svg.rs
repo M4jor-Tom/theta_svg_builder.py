@@ -1,6 +1,7 @@
 //! Document assembly: the `<svg>` header, `<defs>`, the stylesheet, and the
 //! three content slots (background pattern, rain overlay, centre glyph).
 use crate::geom::{Lattice, fmt};
+use crate::icon::{ico_hexatri, ico_ship};
 use crate::params::{Glyph, Scene, background};
 use crate::rng::PyRandom;
 use crate::style::{PAL, css};
@@ -52,7 +53,10 @@ pub fn build_svg(w: u32, h: u32, scene: &Scene) -> String {
     let bg_svg = pat_trihex(&lat, &mut rng);
     let rain_svg = String::new();
     let k = u * 0.34 / 200.0;
-    let glyph = String::new();
+    let glyph = match scene.glyph {
+        Glyph::Ship => ico_ship(),
+        Glyph::Hexatri { rotate } => ico_hexatri(rotate),
+    };
     let (ws, hs) = (fmt(w as f64), fmt(h as f64));
     let (cx, cy) = (fmt(w as f64 / 2.0), fmt(h as f64 / 2.0));
     let icon_svg = format!(

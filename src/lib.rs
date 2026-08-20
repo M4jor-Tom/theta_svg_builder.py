@@ -4,6 +4,7 @@
 //! from background.py:1-52.)
 
 pub mod geom;
+pub mod icon;
 pub mod params;
 pub mod rng;
 pub mod style;
