@@ -44,22 +44,24 @@ struct Defs {
 /// the second newline is load-bearing -- collapsing it back to one silently
 /// drops the render's last byte.
 ///
-/// Its `viewBox="0 0 {{+ ws +}} {{+ hs }}"` needs those `+` markers because
-/// `whitespace = "suppress"` trims whitespace-only text next to `{{ }}`
-/// expressions the same as it does around `{% %}` blocks -- without them the
-/// literal spaces between "0 0", `ws` and `hs` vanish and the attribute reads
-/// as `viewBox="0 019201080"`. Every other interpolation in this file and in
-/// `defs.svg` sits directly against a quote, bracket or another tag, so this
-/// is the one place that needs them.
+/// `view_box` and `icon_transform` are whole attribute values, not the
+/// numbers inside them, for the same reason `trihex.rs`'s `VoidCell::rot` is:
+/// the template must not be the thing that puts the "0 0" origin in front of
+/// a size, the space between a width and a height, the comma between two
+/// coordinates or the space before `scale(`. `ws`/`hs` and `cx`/`cy` stay
+/// beside them because three elements -- the root `<svg>`'s own width/height
+/// and the two `<rect>`s -- still take a size one attribute at a time, and
+/// the halo circle takes the centre the same way.
 #[derive(askama::Template)]
 #[template(path = "root.svg")]
 struct Root {
+    view_box: String,
     ws: String,
     hs: String,
     cx: String,
     cy: String,
     clear_r: String,
-    k: String,
+    icon_transform: String,
     label: String,
     defs: String,
     css: String,
@@ -89,7 +91,7 @@ pub fn build_svg(w: u32, h: u32, scene: &Scene) -> String {
         nebulae,
     }
     .render()
-    .unwrap();
+    .expect("writing to a String");
 
     let bg_svg = pat_trihex(w, h, &lat, scene, &mut rng);
     // between the pattern and the halo, so the halo subtracts the rain around
@@ -124,12 +126,13 @@ pub fn build_svg(w: u32, h: u32, scene: &Scene) -> String {
     }
 
     Root {
+        view_box: format!("0 0 {ws} {hs}"),
+        icon_transform: format!("translate({cx},{cy}) scale({})", fmt(k)),
         ws,
         hs,
         cx,
         cy,
         clear_r: fmt(clear_r),
-        k: fmt(k),
         label,
         defs,
         css: css(),
@@ -138,7 +141,7 @@ pub fn build_svg(w: u32, h: u32, scene: &Scene) -> String {
         glyph,
     }
     .render()
-    .unwrap()
+    .expect("writing to a String")
 }
 
 #[cfg(test)]

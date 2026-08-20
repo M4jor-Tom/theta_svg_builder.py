@@ -277,8 +277,11 @@ struct HexBorder {
 /// separating space, and the closing one stays on `{% endif %}` so it is
 /// emitted whether or not the branch was taken -- exactly what
 /// `<polygon points=...>` needs when there is no class to announce.
-/// `templates/root.svg` hits the same rule between two `{{ }}` expressions;
-/// see `svg.rs`'s `Root`.
+/// `templates/root.svg` used to carry the same pair between two `{{ }}`
+/// expressions and no longer does: Rust hands it the finished `viewBox` and
+/// `transform` values instead (`svg.rs`'s `Root`), which is the better fix
+/// wherever the separator sits between two interpolations rather than, as
+/// here, between a tag name and an attribute the template may not emit at all.
 #[derive(askama::Template)]
 #[template(path = "trihex.svg")]
 struct Trihex {
