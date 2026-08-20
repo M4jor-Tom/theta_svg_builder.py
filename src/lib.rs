@@ -5,6 +5,7 @@
 
 pub mod geom;
 pub mod icon;
+pub mod matrix;
 pub mod params;
 pub mod rng;
 pub mod style;

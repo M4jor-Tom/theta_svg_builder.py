@@ -2,6 +2,7 @@
 //! three content slots (background pattern, rain overlay, centre glyph).
 use crate::geom::{Lattice, fmt};
 use crate::icon::{ico_hexatri, ico_ship};
+use crate::matrix::pat_matrix;
 use crate::params::{Glyph, Scene, background};
 use crate::rng::PyRandom;
 use crate::style::{PAL, css};
@@ -51,7 +52,11 @@ pub fn build_svg(w: u32, h: u32, scene: &Scene) -> String {
     }
 
     let bg_svg = pat_trihex(w, h, &lat, scene, &mut rng);
-    let rain_svg = String::new();
+    // between the pattern and the halo, so the halo subtracts the rain around
+    // the icon exactly as it subtracts the lattice
+    let rain_svg = scene.overlay.as_ref().map_or(String::new(), |rain| {
+        pat_matrix(w, h, &lat, scene.seed, rain.angle, &rain.color)
+    });
     let k = u * 0.34 / 200.0;
     let glyph = match scene.glyph {
         Glyph::Ship => ico_ship(),
