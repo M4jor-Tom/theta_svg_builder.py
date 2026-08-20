@@ -1,9 +1,50 @@
 //! `overlay.matrix`: the character rain.
-use std::fmt::Write as _;
+use askama::Template;
 
 use crate::geom::{Lattice, fmt};
 use crate::rng::cell_rng;
 use crate::style::{MATRIX_FRAC, MATRIX_GLYPHS, MATRIX_HEAD_STEP, MATRIX_KF, MATRIX_S, hex_rgba};
+
+/// One character cell, already reduced to what `matrix.svg` substitutes
+/// verbatim. `style` is the whole `animation-delay:-{s}s` value rather than
+/// the bare seconds -- a template may only substitute, so the sign and unit
+/// are assembled here, not stitched on around an interpolation. `o` is the
+/// fill-opacity this glyph holds at t=0 (`pat_matrix`'s keyframe arithmetic,
+/// pre-rounded): the resting frame `prefers-reduced-motion` falls back to.
+/// `ch` is interpolated unescaped -- safe only because `MATRIX_GLYPHS`
+/// (`style.rs:48`) excludes `< > & " '` by construction, which is also why
+/// `.svg` templates register the no-op `Text` escaper instead of an HTML one.
+struct RainCell {
+    x: String,
+    y: String,
+    style: String,
+    o: String,
+    ch: char,
+}
+
+/// One rain column: its whole `--d:{s}s` style value, inherited by every cell
+/// below so a column sets its speed once instead of repeating
+/// `animation-duration` on each of them, plus its cells, head to tail.
+struct RainColumn {
+    style: String,
+    cells: Vec<RainCell>,
+}
+
+/// The template context for `matrix.svg`. `style` is the layer's whole
+/// `--o:{alpha};--t:{trail}` value: both custom properties are inherited by
+/// every glyph in every column, so they are set once here rather than
+/// repeated per cell. A column that failed the `MATRIX_FRAC` draw never
+/// reaches `columns` at all -- `pat_matrix` only pushes a `RainColumn` for a
+/// slot that passed, so the template has no slot-skipping conditional to get
+/// wrong.
+#[derive(askama::Template)]
+#[template(path = "matrix.svg")]
+struct Matrix {
+    fs: String,
+    rgb: String,
+    style: String,
+    columns: Vec<RainColumn>,
+}
 
 /// overlay.matrix: columns of characters that stay put while a lit head walks
 /// down them at `angle` degrees (0 = downward, increasing clockwise).
@@ -51,13 +92,8 @@ pub fn pat_matrix(w: u32, h: u32, lat: &Lattice, seed: u32, angle: f64, color: &
     let (pitch, step) = (fs * 1.6, fs * 1.05);
     let (cx0, cy0) = (lat.cx0, lat.cy0);
     let n = (band_t / step) as i64 + 2; // cells spanning the band, head to tail
-    let mut out = format!(
-        "<g class=\"matrix\" font-family=\"monospace\" font-size=\"{}\" \
-         text-anchor=\"middle\" fill=\"{rgb}\" style=\"--o:{};--t:{}\">",
-        fmt(fs),
-        fmt(alpha),
-        fmt(alpha * MATRIX_HEAD_STEP)
-    );
+
+    let mut columns = Vec::new();
     for i in 0..(band_p / pitch) as i32 + 1 {
         let mut g = cell_rng("rain", seed, 0, i);
         if g.random() > MATRIX_FRAC {
@@ -66,38 +102,47 @@ pub fn pat_matrix(w: u32, h: u32, lat: &Lattice, seed: u32, angle: f64, color: &
         let dx = i as f64 * pitch - band_p / 2.0;
         let dur = g.uniform(MATRIX_S.0, MATRIX_S.1);
         let head = g.randrange(n as u32) as i64; // the cell lit at t=0
-        // --d is inherited by every glyph below, so a column sets its speed once
-        // instead of repeating animation-duration on all N of them
-        write!(out, "<g style=\"--d:{}s\">", fmt(dur)).expect("writing to a String");
-        for j in 0..n {
-            let dy = j as f64 * step - band_t / 2.0;
-            // how far into its cycle this cell is -- `head - j` is negative for
-            // most cells, and Python's `%` is never negative, so rem_euclid
-            let pct = 100.0 * (head - j).rem_euclid(n) as f64 / n as f64;
-            // ...evaluated against the keyframes,
-            let o = if pct <= hold {
-                alpha * (1.0 - (1.0 - MATRIX_HEAD_STEP) * pct / hold)
-            } else if pct <= out_at {
-                alpha * MATRIX_HEAD_STEP * (1.0 - (pct - hold) / (out_at - hold))
-            } else {
-                0.0
-            };
-            write!(
-                out,
-                "<text class=\"rain\" x=\"{}\" y=\"{}\" \
-                 style=\"animation-delay:-{}s\" fill-opacity=\"{}\">{}</text>",
-                fmt(cx0 + dx * co - dy * si),
-                fmt(cy0 + dx * si + dy * co),
-                fmt(dur * (head + n - j) as f64 / n as f64),
-                fmt(o),
-                g.choice(MATRIX_GLYPHS) as char
-            )
-            .expect("writing to a String");
-        }
-        out.push_str("</g>");
+        let cells = (0..n)
+            .map(|j| {
+                let dy = j as f64 * step - band_t / 2.0;
+                // how far into its cycle this cell is -- `head - j` is
+                // negative for most cells, and Python's `%` is never
+                // negative, so rem_euclid
+                let pct = 100.0 * (head - j).rem_euclid(n) as f64 / n as f64;
+                // ...evaluated against the keyframes,
+                let o = if pct <= hold {
+                    alpha * (1.0 - (1.0 - MATRIX_HEAD_STEP) * pct / hold)
+                } else if pct <= out_at {
+                    alpha * MATRIX_HEAD_STEP * (1.0 - (pct - hold) / (out_at - hold))
+                } else {
+                    0.0
+                };
+                RainCell {
+                    x: fmt(cx0 + dx * co - dy * si),
+                    y: fmt(cy0 + dx * si + dy * co),
+                    style: format!(
+                        "animation-delay:-{}s",
+                        fmt(dur * (head + n - j) as f64 / n as f64)
+                    ),
+                    o: fmt(o),
+                    ch: g.choice(MATRIX_GLYPHS) as char,
+                }
+            })
+            .collect();
+        columns.push(RainColumn {
+            style: format!("--d:{}s", fmt(dur)),
+            cells,
+        });
     }
-    out.push_str("</g>");
-    out
+
+    Matrix {
+        fs: fmt(fs),
+        rgb,
+        style: format!("--o:{};--t:{}", fmt(alpha), fmt(alpha * MATRIX_HEAD_STEP)),
+        columns,
+    }
+    .render()
+    .unwrap()
 }
 
 #[cfg(test)]

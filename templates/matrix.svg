@@ -1,0 +1,1 @@
+<g class="matrix" font-family="monospace" font-size="{{ fs }}" text-anchor="middle" fill="{{ rgb }}" style="{{ style }}">{% for col in columns %}<g style="{{ col.style }}">{% for c in col.cells %}<text class="rain" x="{{ c.x }}" y="{{ c.y }}" style="{{ c.style }}" fill-opacity="{{ c.o }}">{{ c.ch }}</text>{% endfor %}</g>{% endfor %}</g>
