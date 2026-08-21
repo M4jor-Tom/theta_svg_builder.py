@@ -91,6 +91,7 @@ the icon).
 nix run .#bgsvg                       # the schema's defaults
 nix run .#bgsvg -- path/to/config.json
 nix run .#bgsvg -- --configs          # dump the 42-config corpus as JSON lines
+nix run .#bgsvg -- --descriptor      # parameters.proto as a FileDescriptorSet, for other languages
 nix develop -c cargo test             # invariants
 nix develop -c python3 test/golden.py # the picture did not change
 ```

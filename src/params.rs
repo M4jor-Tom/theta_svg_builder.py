@@ -13,6 +13,14 @@ mod generated {
 }
 pub use generated::*;
 
+/// `parameters.proto` compiled to a `FileDescriptorSet` -- the schema itself,
+/// machine-readable.
+///
+/// `build.rs` already produces these bytes for `pbjson-build` and then throws
+/// them away; this keeps them. A consumer in another language cannot read the
+/// Rust enums, so this is what it checks its own field list against.
+pub const DESCRIPTOR: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/descriptor.bin"));
+
 use crate::Error;
 use crate::style::{MATRIX_COLOR, hex_rgba};
 
