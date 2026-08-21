@@ -161,6 +161,11 @@ nix develop -c python3 test/golden.py            # verify
 nix develop -c python3 test/golden.py --regen    # rewrite after an intended visual change
 ```
 
+```sh
+nix build .#bgsvg-wasm
+BGSVG_WASM=$PWD/result/nodejs nix develop -c node test/wasm.mjs   # the wasm build renders the same bytes
+```
+
 `cargo test --workspace` says the right code ran and the invariants hold; the golden
 corpus says the picture is unchanged and well-formed. `test/golden/` holds
 those same 42 configs, each kept beside the SVG it renders:
