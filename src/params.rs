@@ -397,7 +397,10 @@ mod tests {
         }
         let msg = parse_res("nope").unwrap_err().to_string();
         for (name, _) in RESOLUTIONS {
-            assert!(msg.contains(name), "error message omits preset {name}: {msg}");
+            assert!(
+                msg.contains(name),
+                "error message omits preset {name}: {msg}"
+            );
         }
     }
 }

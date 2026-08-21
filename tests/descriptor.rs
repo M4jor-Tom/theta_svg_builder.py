@@ -11,8 +11,18 @@ fn the_descriptor_carries_the_whole_schema() {
     // prove this is our schema and not some other descriptor set.
     let s = String::from_utf8_lossy(DESCRIPTOR);
     for name in [
-        "svg_builder", "Parameters", "Output", "Background", "Icon", "Hexatri",
-        "Ship", "Overlay", "Matrix", "CLOSEOPEN", "STARFIELD", "ROTATE",
+        "svg_builder",
+        "Parameters",
+        "Output",
+        "Background",
+        "Icon",
+        "Hexatri",
+        "Ship",
+        "Overlay",
+        "Matrix",
+        "CLOSEOPEN",
+        "STARFIELD",
+        "ROTATE",
     ] {
         assert!(s.contains(name), "descriptor does not mention {name}");
     }
