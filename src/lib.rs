@@ -104,7 +104,7 @@ impl From<serde_json::Error> for Error {
     }
 }
 
-/// Parse, validate, flatten — the whole schema boundary in one call.
+/// Parse, validate, flatten -- the whole schema boundary in one call.
 ///
 /// Returns the message alongside the `Scene` because the two callers need
 /// different halves: the CLI reads `output` to pick a sink, and a renderer
@@ -121,9 +121,15 @@ pub fn load(json: &str) -> Result<(params::Parameters, params::Scene), Error> {
 ///
 /// This is what a consumer without a filesystem calls. It shares `load` with
 /// the CLI rather than repeating it, so a rule added to `params::validate`
-/// cannot reach one caller and miss the other — the same reason both test
-/// surfaces enumerate from `params::valid_configs`.
+/// cannot reach one caller and miss the other -- the same reason both test
+/// surfaces enumerate from `params::valid_configs`. A zero `w` or `h` is
+/// rejected here rather than in `Lattice::new`, where it would divide by a
+/// zero row height and overflow the row count -- this is the function every
+/// caller funnels through, so this is where that guard has to live.
 pub fn render_to_string(json: &str, w: u32, h: u32) -> Result<String, Error> {
+    if w == 0 || h == 0 {
+        return Err(Error::Invalid("width and height must be non-zero".into()));
+    }
     let (_, scene) = load(json)?;
     Ok(svg::build_svg(w, h, &scene))
 }

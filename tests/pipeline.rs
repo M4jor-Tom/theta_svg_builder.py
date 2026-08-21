@@ -37,3 +37,18 @@ fn load_returns_the_message_too_so_the_cli_can_pick_a_sink() {
     assert_eq!(scene.seed, 7);
     assert!(p.output.is_some(), "the sink must survive load()");
 }
+
+#[test]
+fn render_to_string_rejects_a_zero_dimension_before_it_can_overflow() {
+    // a zero row height would otherwise reach Lattice::new and overflow its
+    // row count -- every caller, including bgsvg-wasm, funnels through here
+    assert!(matches!(
+        render_to_string("{}", 0, 360).unwrap_err(),
+        Error::Invalid(_)
+    ));
+    assert!(matches!(
+        render_to_string("{}", 640, 0).unwrap_err(),
+        Error::Invalid(_)
+    ));
+    assert!(render_to_string("{}", 640, 360).is_ok());
+}
