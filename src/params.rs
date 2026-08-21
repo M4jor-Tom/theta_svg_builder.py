@@ -158,22 +158,29 @@ pub fn validate(p: &Parameters) -> Result<(), Error> {
     Ok(())
 }
 
+/// The resolution presets, in the order a consumer should offer them.
+///
+/// At module scope rather than inside `parse_res` because the list itself is
+/// now part of the API: a UI builds a dropdown from it, and retyping eight
+/// names somewhere else is exactly how they drift apart. `parse_res` reads it
+/// too, so the accepted set and the offered set cannot diverge.
+pub const RESOLUTIONS: [(&str, (u32, u32)); 8] = [
+    ("1080p", (1920, 1080)),
+    ("1440p", (2560, 1440)),
+    ("4k", (3840, 2160)),
+    ("720p", (1280, 720)),
+    ("mobile", (1080, 1920)),
+    ("square", (1080, 1080)),
+    ("tablet", (1536, 2048)),
+    ("ultrawide", (3440, 1440)),
+];
+
 /// Empty -> 1080p, else a preset name or WIDTHxHEIGHT.
 ///
 /// A zero dimension is rejected here rather than dividing by zero downstream:
 /// the Python raised an uncaught ZeroDivisionError, and Rust would quietly
 /// emit a garbage SVG instead.
 pub fn parse_res(s: &str) -> Result<(u32, u32), Error> {
-    const PRESETS: [(&str, (u32, u32)); 8] = [
-        ("1080p", (1920, 1080)),
-        ("1440p", (2560, 1440)),
-        ("4k", (3840, 2160)),
-        ("720p", (1280, 720)),
-        ("mobile", (1080, 1920)),
-        ("square", (1080, 1080)),
-        ("tablet", (1536, 2048)),
-        ("ultrawide", (3440, 1440)),
-    ];
     // The empty-string fallback is decided on the *raw* input, before
     // trimming -- `background.py:677`'s `(s or "1080p").strip().lower()`
     // rejects a whitespace-only string (it strips to "" after the `or`
@@ -181,11 +188,11 @@ pub fn parse_res(s: &str) -> Result<(u32, u32), Error> {
     let s = if s.is_empty() { "1080p" } else { s };
     let s = s.trim().to_lowercase();
     let s = s.as_str();
-    if let Some((_, wh)) = PRESETS.iter().find(|(name, _)| *name == s) {
+    if let Some((_, wh)) = RESOLUTIONS.iter().find(|(name, _)| *name == s) {
         return Ok(*wh);
     }
     let bad = || {
-        let names: Vec<&str> = PRESETS.iter().map(|(n, _)| *n).collect();
+        let names: Vec<&str> = RESOLUTIONS.iter().map(|(n, _)| *n).collect();
         Error::Invalid(format!(
             "bad resolution '{s}': use WIDTHxHEIGHT or a preset {names:?}"
         ))
@@ -368,6 +375,21 @@ mod tests {
             let text = serde_json::to_string(c).unwrap();
             let p = parse(&text).unwrap_or_else(|e| panic!("{text}: {e}"));
             validate(&p).unwrap_or_else(|e| panic!("{text}: {e}"));
+        }
+    }
+
+    /// The list a consumer offers must be exactly the list `parse_res` accepts,
+    /// and exactly the list the error message names. Three copies that can
+    /// drift became one; this is what holds them together.
+    #[test]
+    fn resolutions_is_what_parse_res_accepts() {
+        assert_eq!(RESOLUTIONS.len(), 8);
+        for (name, wh) in RESOLUTIONS {
+            assert_eq!(parse_res(name).unwrap(), wh, "preset {name}");
+        }
+        let msg = parse_res("nope").unwrap_err().to_string();
+        for (name, _) in RESOLUTIONS {
+            assert!(msg.contains(name), "error message omits preset {name}: {msg}");
         }
     }
 }
