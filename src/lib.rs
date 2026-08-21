@@ -104,15 +104,37 @@ impl From<serde_json::Error> for Error {
     }
 }
 
+/// Parse, validate, flatten — the whole schema boundary in one call.
+///
+/// Returns the message alongside the `Scene` because the two callers need
+/// different halves: the CLI reads `output` to pick a sink, and a renderer
+/// needs only the flattened scene. The README already calls this step "load"
+/// ("rejected at load"), so it keeps that name.
+pub fn load(json: &str) -> Result<(params::Parameters, params::Scene), Error> {
+    let p = params::parse(json)?;
+    params::validate(&p)?;
+    let scene = params::resolve(&p);
+    Ok((p, scene))
+}
+
+/// One config's text to one SVG document, with no destination involved.
+///
+/// This is what a consumer without a filesystem calls. It shares `load` with
+/// the CLI rather than repeating it, so a rule added to `params::validate`
+/// cannot reach one caller and miss the other — the same reason both test
+/// surfaces enumerate from `params::valid_configs`.
+pub fn render_to_string(json: &str, w: u32, h: u32) -> Result<String, Error> {
+    let (_, scene) = load(json)?;
+    Ok(svg::build_svg(w, h, &scene))
+}
+
 /// Parse, validate, resolve and write -- porting `background.py:696-727`. The
 /// sink decides both the resolution list and where the bytes go: stdout and a
 /// file each carry exactly one resolution, a directory (also the unset
 /// default) carries a list, empty meaning one entry at `parse_res("")`'s
 /// default.
 fn render(text: &str) -> Result<(), Error> {
-    let p = params::parse(text)?;
-    params::validate(&p)?;
-    let scene = params::resolve(&p);
+    let (p, scene) = load(text)?;
     let sink = p.output.as_ref().and_then(|o| o.sink.as_ref());
 
     if let Some(params::output::Sink::Stdout(s)) = sink {
