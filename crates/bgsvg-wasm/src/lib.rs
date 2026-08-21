@@ -27,7 +27,7 @@ fn classify(e: &bgsvg::Error) -> (&'static str, Option<(usize, usize)>) {
 fn throw(e: bgsvg::Error) -> JsValue {
     let (kind, at) = classify(&e);
     let o = js_sys::Object::new();
-    let mut set = |k: &str, v: JsValue| {
+    let set = |k: &str, v: JsValue| {
         js_sys::Reflect::set(&o, &JsValue::from_str(k), &v)
             .expect("a freshly created object accepts new keys");
     };

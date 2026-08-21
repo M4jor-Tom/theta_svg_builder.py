@@ -9,13 +9,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```sh
 nix run .#bgsvg                       # renders the schema's defaults
 nix run .#bgsvg -- path/to/config.json
-nix develop -c cargo test             # invariants — run after ANY change
+nix develop -c cargo test --workspace  # invariants — run after ANY change
 nix develop -c python3 test/golden.py # the picture did not change (--regen when it should have)
 nix build                             # default package = bgsvg; runs cargo test
 ```
 Without Nix: Rust 1.85+ and `protoc` on `PATH`.
 
-Two tests, and a change is unfinished until both pass. `cargo test` builds all 42 valid `background.motion` × `background.image` × `icon` × `overlay` combinations and asserts the invariants below (`#[test]` functions across `src/` and `tests/`) — it says a render is *well-formed*. `test/golden.py` says it is *unchanged*: the same 42 configs live in `test/golden/<sha512 of the SVG>/`, each beside the `<sha512 of the SVG>_background.svg` it renders. One rule covers both files — each is named by the sha512 of its own bytes, exactly as written — so `sha512sum` reproduces every name unaided. The SVG is kept, not just its hash, so a failure reports the first differing byte instead of only a moved hash. `tests/configs.rs` and `test/golden.py` both enumerate from `bgsvg --configs`, which is `params::valid_configs`, rather than each carrying its own loop, so a new axis cannot reach one surface and miss the other — add an enum value and both sweeps grow. It fails on any byte that moves, so run `--regen` when the picture was **meant** to move, and read the diff first — a golden change you did not intend is the regression.
+Two tests, and a change is unfinished until both pass. `cargo test --workspace` builds all 42 valid `background.motion` × `background.image` × `icon` × `overlay` combinations and asserts the invariants below (`#[test]` functions across `src/` and `tests/`) — it says a render is *well-formed*. `test/golden.py` says it is *unchanged*: the same 42 configs live in `test/golden/<sha512 of the SVG>/`, each beside the `<sha512 of the SVG>_background.svg` it renders. One rule covers both files — each is named by the sha512 of its own bytes, exactly as written — so `sha512sum` reproduces every name unaided. The SVG is kept, not just its hash, so a failure reports the first differing byte instead of only a moved hash. `tests/configs.rs` and `test/golden.py` both enumerate from `bgsvg --configs`, which is `params::valid_configs`, rather than each carrying its own loop, so a new axis cannot reach one surface and miss the other — add an enum value and both sweeps grow. It fails on any byte that moves, so run `--regen` when the picture was **meant** to move, and read the diff first — a golden change you did not intend is the regression.
 
 ## Architecture
 

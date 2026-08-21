@@ -27,6 +27,7 @@
                 ./src
                 ./templates
                 ./tests
+                ./crates
               ];
             };
             cargoLock.lockFile = ./Cargo.lock;
