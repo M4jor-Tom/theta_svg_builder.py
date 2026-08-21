@@ -110,7 +110,7 @@ decisions.
 ### How to verify
 
 ```bash
-nix develop -c cargo test    # the workspace, including bgsvg-wasm
+nix develop -c cargo test --workspace  # the workspace, including bgsvg-wasm
 nix build                    # default package still bgsvg
 ```
 

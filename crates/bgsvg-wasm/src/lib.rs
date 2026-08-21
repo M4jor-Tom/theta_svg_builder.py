@@ -17,9 +17,22 @@ fn classify(e: &bgsvg::Error) -> (&'static str, Option<(usize, usize)>) {
         // serde_json's position is 1-based and points into the text the user typed
         bgsvg::Error::Schema(e) => ("schema", Some((e.line(), e.column()))),
         bgsvg::Error::Invalid(_) => ("invalid", None),
-        // unreachable here: there is no filesystem in a browser to fail
+        // unreachable here: neither render_to_string nor parse_res ever touches
+        // a filesystem -- Error::Io is only ever constructed on the CLI path
         bgsvg::Error::Io(_) => ("invalid", None),
     }
+}
+
+/// Zero would reach `Lattice::new` and overflow its row count, so it is
+/// rejected here. `params::parse_res` already refuses it on the CLI path;
+/// this boundary takes its values straight from JavaScript.
+fn check_size(width: u32, height: u32) -> Result<(), bgsvg::Error> {
+    if width == 0 || height == 0 {
+        return Err(bgsvg::Error::Invalid(
+            "width and height must be non-zero".into(),
+        ));
+    }
+    Ok(())
 }
 
 /// `{ kind, message, line?, column? }` -- see the API specification in
@@ -53,6 +66,7 @@ pub fn start() {
 /// written for the CLI renders unaltered rather than being rejected.
 #[wasm_bindgen]
 pub fn render(json: &str, width: u32, height: u32) -> Result<String, JsValue> {
+    check_size(width, height).map_err(throw)?;
     bgsvg::render_to_string(json, width, height).map_err(throw)
 }
 
@@ -95,6 +109,15 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(classify(&invalid), ("invalid", None));
+    }
+
+    /// `Lattice::new` divides by row height, which is zero at a zero
+    /// dimension -- rejected here rather than reaching that overflow.
+    #[test]
+    fn zero_width_or_height_is_rejected_before_it_can_overflow() {
+        assert!(matches!(check_size(0, 360), Err(bgsvg::Error::Invalid(_))));
+        assert!(matches!(check_size(640, 0), Err(bgsvg::Error::Invalid(_))));
+        assert!(check_size(640, 360).is_ok());
     }
 
     #[test]

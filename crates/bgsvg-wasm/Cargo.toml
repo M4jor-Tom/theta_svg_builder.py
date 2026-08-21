@@ -5,7 +5,7 @@ edition = "2024"
 description = "Browser-callable bindings for the bgsvg renderer"
 
 [lib]
-# cdylib for the wasm artifact; rlib so `cargo test` can build it for the host
+# cdylib for the wasm artifact; rlib so `cargo test --workspace` can build it for the host
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
