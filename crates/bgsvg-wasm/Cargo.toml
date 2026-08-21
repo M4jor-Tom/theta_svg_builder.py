@@ -1,0 +1,16 @@
+[package]
+name = "bgsvg-wasm"
+version = "0.1.0"
+edition = "2024"
+description = "Browser-callable bindings for the bgsvg renderer"
+
+[lib]
+# cdylib for the wasm artifact; rlib so `cargo test` can build it for the host
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+bgsvg = { path = "../.." }
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+console_error_panic_hook = "0.1"
+serde_json = "1"
