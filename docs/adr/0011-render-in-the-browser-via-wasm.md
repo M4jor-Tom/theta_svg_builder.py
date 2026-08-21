@@ -116,6 +116,11 @@ main document, and revoke each blob URL.
   written for the CLI therefore renders unaltered rather than being rejected.
 - `Error::Io` is unreachable in this build and has no mapping to the thrown
   error object.
+- The spec says `render()` "calls the new function once per resolution";
+  the implementation instead calls `load` once and `svg::build_svg` once per
+  resolution, which avoids re-parsing and re-validating the same JSON for
+  every size a directory sink asks for — deliberate, and the stated purpose
+  still holds because every path goes through `load`.
 
 ## Resumption (for Agent)
 
@@ -129,9 +134,10 @@ reports the WASM build renders byte-identical documents at 1920×1080.
 | File | Role |
 |------|------|
 | `docs/superpowers/specs/2026-08-21-wasm-target-design.md` | the design, including the full API specification |
-| `src/lib.rs:112` | private `render()`, whose first four steps become `render_to_string` |
+| `src/lib.rs:113` | `load` — parse, validate, resolve; shared by `render_to_string` and the CLI's `render` |
+| `src/lib.rs:129` | `render_to_string(json, w, h)` — one config's text to one SVG document, no destination involved; what `bgsvg-wasm` calls |
 | `src/svg.rs:76` | `build_svg(w, h, &Scene)` — the pure function this exposes |
-| `flake.nix` | gains the wasm target and `wasm-bindgen-cli` |
+| `flake.nix` | gained the `wasm32-unknown-unknown` target and `wasm-bindgen-cli`, and exposes `packages.bgsvg-wasm` |
 
 ### Next steps
 

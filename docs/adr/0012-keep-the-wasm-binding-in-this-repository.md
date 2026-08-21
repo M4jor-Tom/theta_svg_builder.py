@@ -99,9 +99,10 @@ still lists exactly askama, pbjson, prost, serde, serde_json and sha2.
 | File | Role |
 |------|------|
 | `docs/superpowers/specs/2026-08-21-wasm-target-design.md` | the API specification this crate must satisfy |
-| `Cargo.toml` | becomes a workspace root |
-| `src/params.rs:167` | `PRESETS`, to be lifted to `pub const RESOLUTIONS` |
-| `build.rs` | already writes `descriptor.bin` to `OUT_DIR` and discards it |
+| `Cargo.toml` | is the workspace root; `members = ["crates/bgsvg-wasm"]` |
+| `src/params.rs:175` | `pub const RESOLUTIONS` — the preset table `resolve_resolution` and `resolutions()` read |
+| `build.rs` | writes `descriptor.bin` to `OUT_DIR`; `params::DESCRIPTOR` (`src/params.rs:22`) embeds it with `include_bytes!` instead of discarding it |
+| `crates/bgsvg-wasm/src/lib.rs` | the whole crate: `render`, `resolve_resolution`, `resolutions`, and the `Error` → thrown-object mapping |
 
 ### Next steps
 

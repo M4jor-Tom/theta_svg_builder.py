@@ -91,9 +91,9 @@ the icon).
 nix run .#bgsvg                       # the schema's defaults
 nix run .#bgsvg -- path/to/config.json
 nix run .#bgsvg -- --configs          # dump the 42-config corpus as JSON lines
-nix run .#bgsvg -- --descriptor      # parameters.proto as a FileDescriptorSet, for other languages
+nix run .#bgsvg -- --descriptor       # parameters.proto as a FileDescriptorSet, for other languages
 nix build .#bgsvg-wasm                # the browser-callable module (web/ and nodejs/)
-nix develop -c cargo test --workspace  # invariants
+nix develop -c cargo test --workspace # invariants
 nix develop -c python3 test/golden.py # the picture did not change
 ```
 
@@ -161,14 +161,10 @@ nix develop -c python3 test/golden.py            # verify
 nix develop -c python3 test/golden.py --regen    # rewrite after an intended visual change
 ```
 
-```sh
-nix build .#bgsvg-wasm
-BGSVG_WASM=$PWD/result/nodejs nix develop -c node test/wasm.mjs   # the wasm build renders the same bytes
-```
-
 `cargo test --workspace` says the right code ran and the invariants hold; the golden
-corpus says the picture is unchanged and well-formed. `test/golden/` holds
-those same 42 configs, each kept beside the SVG it renders:
+corpus says the picture is unchanged and well-formed; and `test/wasm.mjs` (below)
+says the wasm build lands on those same bytes. `test/golden/` holds those same 42
+configs, each kept beside the SVG it renders:
 
 ```
 test/golden/<sha512 of the SVG>/<sha512 of the JSON>_parameters.json
@@ -197,3 +193,12 @@ with several SVGs, which this layout cannot name, so the corpus holds
 single-render configs only. Two configs in one directory would mean they render
 byte-identical SVGs — an axis that stopped changing the picture — and `scan()`
 reports it.
+
+`test/wasm.mjs` sweeps the same corpus through the browser-callable build and
+compares bytes, so a wasm build that renders nearly the same picture still
+fails:
+
+```sh
+nix build .#bgsvg-wasm
+BGSVG_WASM=$PWD/result/nodejs nix develop -c node test/wasm.mjs   # the wasm build renders the same bytes
+```
