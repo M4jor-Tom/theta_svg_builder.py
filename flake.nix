@@ -10,27 +10,31 @@
     in
     {
       packages = forAll (
-        pkgs: rec {
+        pkgs:
+        let
+          # only what the build reads: the corpus and the docs stay out of the
+          # store path, so editing a golden cannot trigger a rebuild
+          src = pkgs.lib.fileset.toSource {
+            root = ./.;
+            fileset = pkgs.lib.fileset.unions [
+              ./Cargo.toml
+              ./Cargo.lock
+              ./build.rs
+              ./parameters.proto
+              ./askama.toml
+              ./src
+              ./templates
+              ./tests
+              ./crates/bgsvg-wasm/Cargo.toml
+              ./crates/bgsvg-wasm/src
+            ];
+          };
+        in
+        rec {
           bgsvg = pkgs.rustPlatform.buildRustPackage {
             pname = "bgsvg";
             version = "0.1.0";
-            # only what the build reads: the corpus and the docs stay out of the
-            # store path, so editing a golden cannot trigger a rebuild
-            src = pkgs.lib.fileset.toSource {
-              root = ./.;
-              fileset = pkgs.lib.fileset.unions [
-                ./Cargo.toml
-                ./Cargo.lock
-                ./build.rs
-                ./parameters.proto
-                ./askama.toml
-                ./src
-                ./templates
-                ./tests
-                ./crates/bgsvg-wasm/Cargo.toml
-                ./crates/bgsvg-wasm/src
-              ];
-            };
+            inherit src;
             cargoLock.lockFile = ./Cargo.lock;
             # prost-build shells out to protoc; PROTOC is how it finds it
             nativeBuildInputs = [ pkgs.protobuf ];
@@ -39,24 +43,15 @@
           bgsvg-wasm = pkgs.rustPlatform.buildRustPackage {
             pname = "bgsvg-wasm";
             version = "0.1.0";
-            src = pkgs.lib.fileset.toSource {
-              root = ./.;
-              fileset = pkgs.lib.fileset.unions [
-                ./Cargo.toml
-                ./Cargo.lock
-                ./build.rs
-                ./parameters.proto
-                ./askama.toml
-                ./src
-                ./templates
-                ./tests
-                ./crates/bgsvg-wasm/Cargo.toml
-                ./crates/bgsvg-wasm/src
-              ];
-            };
+            inherit src;
             cargoLock.lockFile = ./Cargo.lock;
             # protoc for prost-build; lld is the wasm32-unknown-unknown linker --
-            # nixpkgs' rustc carries the target's std but not a bundled rust-lld
+            # nixpkgs' rustc carries the target's std but not a bundled rust-lld.
+            # wasm-bindgen-cli's schema version must match Cargo.lock's
+            # wasm-bindgen/js-sys exactly, so a nixpkgs.url bump can break this
+            # build with a "schema version" mismatch -- repair it with
+            # `cargo update -p wasm-bindgen --precise <version>` (and js-sys,
+            # which pins wasm-bindgen exactly) to match the new CLI's version.
             nativeBuildInputs = [ pkgs.protobuf pkgs.wasm-bindgen-cli pkgs.lld ];
             PROTOC = "${pkgs.protobuf}/bin/protoc";
             buildPhase = ''
@@ -71,7 +66,7 @@
                   --out-dir $out/$t --target $t
               done
             '';
-            # the workspace's tests run natively via `cargo test`, not here
+            # the workspace's tests run natively via `cargo test --workspace`, not here
             doCheck = false;
           };
           default = bgsvg;
