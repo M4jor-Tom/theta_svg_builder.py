@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```sh
 nix run .#bgsvg                       # renders the schema's defaults
 nix run .#bgsvg -- path/to/config.json
+nix build .#bgsvg-wasm                # the browser module; web/ for bundlers, nodejs/ for test/wasm.mjs
 nix develop -c cargo test --workspace  # invariants — run after ANY change
 nix develop -c python3 test/golden.py # the picture did not change (--regen when it should have)
 nix build                             # default package = bgsvg; runs cargo test
