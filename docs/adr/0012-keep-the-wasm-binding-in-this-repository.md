@@ -6,7 +6,7 @@
 | Status   | Accepted                       |
 | Deciders | theta                          |
 | Branch   | `master`                       |
-| Commit   | — (design only; not implemented) |
+| Commit   | `d510469..5644c3f`             |
 
 ## Context
 
@@ -91,7 +91,8 @@ release process for an audience of one.
 
 ### Current state
 
-Designed, not started. No code exists.
+Complete. `bgsvg-wasm` is a workspace member; `cargo tree -p bgsvg --depth 1`
+still lists exactly askama, pbjson, prost, serde, serde_json and sha2.
 
 ### Key files / entry points
 
@@ -104,8 +105,7 @@ Designed, not started. No code exists.
 
 ### Next steps
 
-Implement alongside [[0011]]; they are one piece of work split across two
-decisions.
+None.
 
 ### How to verify
 
@@ -127,6 +127,10 @@ implemented wrongly.
 - The thrown error's `kind` distinction is load-bearing for any consumer: it is
   what separates a syntax error in typed text from a semantic rule violation.
   Do not flatten it to a bare string.
+- `bgsvg-wasm` builds cleanly for the host as well as for
+  `wasm32-unknown-unknown`, so no `#[cfg(target_arch = "wasm32")]` gating was
+  needed anywhere in it — `classify`, the `Error`-to-thrown-object mapping,
+  stays unit-tested natively under plain `cargo test --workspace`.
 
 ### Related
 

@@ -6,7 +6,7 @@
 | Status   | Accepted                       |
 | Deciders | theta                          |
 | Branch   | `master`                       |
-| Commit   | — (design only; not implemented) |
+| Commit   | `d510469..5644c3f`             |
 
 ## Context
 
@@ -90,13 +90,24 @@ main document, and revoke each blob URL.
 
 ### Negative / Trade-offs
 
-- A download of the module, estimated 300–500 KB before compression but **not
-  measured**. If it lands far above that, `opt-level = "z"` and `wasm-opt` come
-  before any other optimisation.
+- A download of the module: **measured** at 366,312 bytes (~358 KiB) for
+  `bgsvg_wasm_bg.wasm`, comfortably inside the pre-implementation 300–500 KB
+  estimate — a measurement, not a guess (`nix build .#bgsvg-wasm --no-link
+  --print-out-paths`, then `du -h`/`stat` on the result). If a future revision
+  lands far above that, `opt-level = "z"` and `wasm-opt` come before any other
+  optimisation.
+- `packages.bgsvg-wasm` emits **two** subdirectories from one `.wasm`: `web/`
+  for a bundler consumer and `nodejs/` for the byte-identity sweep in
+  `test/wasm.mjs`. Only the `wasm-bindgen` JavaScript glue differs between
+  them — the `.wasm` is one build, so rendered bytes cannot differ between the
+  two.
 - A panic traps the module and poisons every later call, so `bgsvg-wasm` carries
   `console_error_panic_hook`. That reports a trap; it does not prevent one.
 - `Cargo.toml` becomes a workspace, and the devShell grows the
-  `wasm32-unknown-unknown` target and `wasm-bindgen-cli`.
+  `wasm32-unknown-unknown` target and `wasm-bindgen-cli`. nixpkgs' `rustc`
+  shipped the `wasm32-unknown-unknown` standard library as-is, so no
+  `rust-overlay` was needed; only `pkgs.lld` had to be added, because the
+  linker binary itself was absent.
 
 ### Neutral
 
@@ -110,7 +121,8 @@ main document, and revoke each blob URL.
 
 ### Current state
 
-Designed, not started. No code exists.
+Complete. All 42 goldens passed unmodified throughout, and `test/wasm.mjs`
+reports the WASM build renders byte-identical documents at 1920×1080.
 
 ### Key files / entry points
 
@@ -123,14 +135,16 @@ Designed, not started. No code exists.
 
 ### Next steps
 
-Implement the six items under the ROADMAP's "WASM target" task.
+None here. The consumer's editor is specified in the `svg.studio.ui`
+repository and is out of scope for this one.
 
 ### How to verify
 
 ```bash
-nix develop -c cargo test              # invariants, unchanged
+nix develop -c cargo test --workspace  # invariants, including bgsvg-wasm
 nix develop -c python3 test/golden.py  # the picture did not change
-# and the new sweep: WASM output == native output across --configs
+nix build .#bgsvg-wasm --no-link --print-out-paths   # then, against that path:
+BGSVG_WASM=<out-path>/nodejs nix develop -c node test/wasm.mjs   # WASM == native, all 42 configs
 ```
 
 ### Gotchas
@@ -142,6 +156,12 @@ nix develop -c python3 test/golden.py  # the picture did not change
 - Do not add `wasm-bindgen` to `bgsvg` itself — see [[0012]].
 - Nothing here may move a rendered byte. The goldens must pass untouched, and
   `--regen` is not the answer if they do not ([[0009]]).
+- **`Cargo.lock`'s `wasm-bindgen`/`js-sys` versions must match
+  `pkgs.wasm-bindgen-cli`'s schema version exactly**, or `nix build
+  .#bgsvg-wasm` fails with a confusing schema-mismatch error rather than a
+  normal compile error. A `nixpkgs.url` bump is the likely trigger; the repair
+  is `cargo update -p wasm-bindgen --precise <version>`. Commented at the pin's
+  site in `flake.nix`.
 
 ### Related
 
