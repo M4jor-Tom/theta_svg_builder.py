@@ -1,4 +1,4 @@
-# 0004. Register the no-op `Text` escaper for `.svg` templates
+# 0008. Register the no-op `Text` escaper for `.svg` templates
 
 | Field    | Value                                  |
 |----------|----------------------------------------|
@@ -143,4 +143,4 @@ nix develop -c python3 test/golden.py
 ### Related
 
 - Commits: `5473be9` (registration), `a201ffa` (the obligation in `CLAUDE.md`)
-- ADRs: [[0001]] engine choice · [[0002]] why only `root.svg` has markup slots
+- ADRs: [[0005]] engine choice · [[0006]] why only `root.svg` has markup slots

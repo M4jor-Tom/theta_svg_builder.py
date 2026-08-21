@@ -1,4 +1,4 @@
-# 0002. Keep composition in Rust — no `.svg` file is ever "morphy"
+# 0006. Keep composition in Rust — no `.svg` file is ever "morphy"
 
 | Field    | Value                                  |
 |----------|----------------------------------------|
@@ -10,7 +10,7 @@
 
 ## Context
 
-Having chosen a template engine ([[0001]]), the question was where *composition*
+Having chosen a template engine ([[0005]]), the question was where *composition*
 lives: the act of assembling a finished document out of independently rendered
 fragments.
 
@@ -52,7 +52,7 @@ render the tree.
 Rejected because it puts the byte-level joins between fragments under the
 template engine's control. Askama then decides what sits between two elements,
 which is precisely the surface where `whitespace = "suppress"` misbehaves
-(see [[0006]]). It also inverts the responsibility: composition is ordering
+(see [[0010]]). It also inverts the responsibility: composition is ordering
 logic, and ordering logic belongs with the code that knows the seeded, ordered
 data.
 
@@ -81,7 +81,7 @@ inside a column loop. Fewer files, no include indirection.
 - **Rust owns every byte between fragments.** The class of "the engine inserted a
   newline at a block boundary" bugs is confined to the inside of six small files.
 - The escaping surface shrank to the five markup slots in `root.svg` — every other
-  interpolation is an attribute value (a number, a colour, an id). See [[0004]].
+  interpolation is an attribute value (a number, a colour, an id). See [[0008]].
 - Composition sits next to the seeded, ordered data it depends on, which is what
   keeps determinism intact.
 - `Template::render_into(&mut dyn fmt::Write)` is available if per-fragment
@@ -139,9 +139,9 @@ nix develop -c python3 test/golden.py
   in `templates/trihex.svg` — **not** by the field declaration order on `Trihex`,
   which askama binds by name and ignores.
 - The blind is emitted *inside its own cell's iteration*, not in a batched second
-  pass. See [[0003]].
+  pass. See [[0007]].
 
 ### Related
 
 - Commits: `c00edee`, `f6f6500`, `9c2cb78`
-- ADRs: [[0001]] engine choice · [[0003]] the seam · [[0004]] escaper
+- ADRs: [[0005]] engine choice · [[0007]] the seam · [[0008]] escaper

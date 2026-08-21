@@ -1,4 +1,4 @@
-# 0006. Use `whitespace = "suppress"` and indent the templates
+# 0010. Use `whitespace = "suppress"` and indent the templates
 
 | Field    | Value                                  |
 |----------|----------------------------------------|
@@ -13,7 +13,7 @@
 The rendered SVG contains no newlines: the previous `format!` strings used
 backslash line-continuation, which eats the newline and following indentation
 while preserving the space before the backslash. Every byte of whitespace in the
-output is therefore deliberate, and the golden corpus pins all of them ([[0005]]).
+output is therefore deliberate, and the golden corpus pins all of them ([[0009]]).
 
 A template file's whitespace *is* output. Indenting a template for readability
 would inject that indentation into every rendered SVG — unless the engine is told
@@ -125,7 +125,7 @@ tail -c 1 templates/defs.svg | od -c      # must NOT be \n
 
 - **`suppress` trims whitespace adjacent to `{{ }}` expressions, not only `{% %}`
   blocks.** This is why `{{+ … +}}` markers were once needed inside `viewBox`. That
-  particular case is gone (the whole value is now built in Rust, see [[0003]]) but
+  particular case is gone (the whole value is now built in Rust, see [[0007]]) but
   the semantics still apply everywhere else.
 - The opening `+` on `{% if … +%}` is **not** redundant. The text following it is
   ` class="win" style="` — not whitespace-only — yet its leading space is still
@@ -137,5 +137,5 @@ tail -c 1 templates/defs.svg | od -c      # must NOT be \n
 ### Related
 
 - Commits: `10e6c23` (the reformat), `f23eebd` (documenting the markers)
-- ADRs: [[0001]] engine choice · [[0003]] why `viewBox` no longer needs markers ·
-  [[0005]] the byte constraint that made this subtle
+- ADRs: [[0005]] engine choice · [[0007]] why `viewBox` no longer needs markers ·
+  [[0009]] the byte constraint that made this subtle

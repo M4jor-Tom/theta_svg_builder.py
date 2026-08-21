@@ -1,4 +1,4 @@
-# 0003. Rust computes; templates only substitute complete values
+# 0007. Rust computes; templates only substitute complete values
 
 | Field    | Value                                  |
 |----------|----------------------------------------|
@@ -14,7 +14,7 @@
 the animation, icon, image and overlay choices must never move a hexagon. The
 same seed must give the same layout across all 42 valid configurations.
 
-Introducing a template layer ([[0001]]) creates a new place where a value can be
+Introducing a template layer ([[0005]]) creates a new place where a value can be
 constructed. If a template can compute, then rendering can vary independently of
 the seed, and the determinism guarantee stops being enforceable by inspection.
 
@@ -142,4 +142,5 @@ To confirm the guard is load-bearing rather than decorative, inject
 ### Related
 
 - Commits: `671f5bb`, `e351f04`, `42e11bf`, `a201ffa`
-- ADRs: [[0002]] where composition lives · [[0005]] how the rule was proven safe
+- ADRs: [[0004]] the RNG whose draw order this rule protects ·
+  [[0006]] where composition lives · [[0009]] how the rule was proven safe

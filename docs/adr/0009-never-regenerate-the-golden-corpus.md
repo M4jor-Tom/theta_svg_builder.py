@@ -1,4 +1,4 @@
-# 0005. Treat zero golden regeneration as the refactor's correctness proof
+# 0009. Treat zero golden regeneration as the refactor's correctness proof
 
 | Field    | Value                                  |
 |----------|----------------------------------------|
@@ -15,7 +15,7 @@ contains, covering every valid `background.motion` × `background.image` × `ico
 × `overlay` combination. `test/golden.py` re-renders and compares bytes; a single
 moved byte fails it.
 
-Rewriting the entire rendering layer ([[0001]]) is exactly the kind of change most
+Rewriting the entire rendering layer ([[0005]]) is exactly the kind of change most
 likely to move a byte by accident. Regenerating the corpus was explicitly offered
 as an acceptable cost up front.
 
@@ -64,7 +64,7 @@ Rejected outright — it makes every subsequent task's "goldens pass" vacuous.
 ### Replace sha512 goldens with structural assertions
 
 Parse the SVG and compare a normalised tree, removing the byte constraint
-entirely. This would make the `svg` builder crate viable ([[0001]]).
+entirely. This would make the `svg` builder crate viable ([[0005]]).
 
 Rejected as out of scope: a larger change than the one being made, and it
 discards a working oracle. Noted as the real fork in the road if byte-pinning
@@ -82,12 +82,12 @@ ever becomes intolerable.
   `hexatri_spins_only_its_triangles`, `the_document_shell_matches_the_corpus`.
   No test was added, removed or weakened to make the refactor pass.
 - Byte-exactness forced good discipline elsewhere: it is what surfaced the
-  template-side value assembly that [[0003]] now forbids.
+  template-side value assembly that [[0007]] now forbids.
 
 ### Negative / Trade-offs
 
 - Template formatting was constrained by output bytes throughout, which is what
-  produced the one-line templates later corrected in [[0006]].
+  produced the one-line templates later corrected in [[0010]].
 - Some structures exist to preserve bytes rather than because they read best
   (`so: so.to_string()` allocating per hexagon for one of two constants).
 
@@ -142,5 +142,6 @@ This was done and it behaves correctly.
 ### Related
 
 - Commits: `5a7e96a..10e6c23` (the whole refactor, corpus untouched throughout)
-- ADRs: [[0001]] engine choice · [[0003]] the rule byte-exactness helped enforce ·
-  [[0006]] the formatting cost it imposed
+- ADRs: [[0002]] the corpus this relies on, and why it is self-naming ·
+  [[0005]] engine choice · [[0007]] the rule byte-exactness helped enforce ·
+  [[0010]] the formatting cost it imposed

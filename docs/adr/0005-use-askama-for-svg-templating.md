@@ -1,4 +1,4 @@
-# 0001. Use askama to move SVG markup out of Rust
+# 0005. Use askama to move SVG markup out of Rust
 
 | Field    | Value                                  |
 |----------|----------------------------------------|
@@ -113,7 +113,7 @@ flow.
   (see the natural-templates alternative) and is explicitly not delivered.
 - The goldens remain sha512-of-bytes, so an askama upgrade that changes whitespace
   handling can break all 42 at once. This is a recurring tax, not a one-off.
-- Askama's whitespace semantics are subtle enough to need their own ADR — see [[0006]].
+- Askama's whitespace semantics are subtle enough to need their own ADR — see [[0010]].
 
 ### Neutral
 
@@ -162,5 +162,6 @@ nix build                                # proves the Nix sandbox sees templates
 ### Related
 
 - Commits: `5473be9` (wiring), `5a7e96a..10e6c23` (full refactor)
-- ADRs: [[0002]] where composition lives · [[0003]] what a template may do ·
-  [[0004]] escaper · [[0005]] byte-exactness as proof · [[0006]] whitespace mode
+- ADRs: [[0002]] the byte-exact corpus that ruled out every serializer-owning option ·
+  [[0006]] where composition lives · [[0007]] what a template may do ·
+  [[0008]] escaper · [[0009]] byte-exactness as proof · [[0010]] whitespace mode
