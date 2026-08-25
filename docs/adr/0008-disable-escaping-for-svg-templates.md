@@ -128,7 +128,7 @@ None — but see Gotchas, which describes a *permanent* obligation rather than a
 ```bash
 grep -A2 '\[\[escaper\]\]' askama.toml   # must name askama::filters::Text for svg
 nix develop -c cargo test
-nix develop -c python3 test/golden.py
+nix develop -c cargo run --example golden
 ```
 
 ### Gotchas

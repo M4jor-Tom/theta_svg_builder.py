@@ -112,23 +112,25 @@ SVG template refactor without regeneration.
 
 | File | Role |
 |------|------|
-| `test/golden.py` | the harness; `--regen` rewrites the corpus |
+| `examples/golden.rs` | the harness; `--regen` rewrites the corpus |
 | `test/golden/` | 42 directories, each named by the sha512 of its own SVG |
 | `src/params.rs` | `valid_configs` — the single enumeration both sweeps read |
 | `tests/configs.rs` | the Rust sweep over the same 42 |
 
+The harness was `test/golden.py` until [[0013]] ported it to Rust; the corpus
+crossed that port unmodified, as it had the two before it.
+
 ### Next steps
 
-One known gap, not yet fixed: **`test/golden.py` does not build the binary.** It
-prefers `target/release/bgsvg`, and `CLAUDE.md` documents running it with no
-build step, so it can print `golden ok` against a stale binary. Add the build
-step to `CLAUDE.md` or to the script.
+The known gap this ADR recorded — **the harness did not build the binary**, so it
+could print `golden ok` against a stale `target/release/bgsvg` — is closed by
+[[0013]]: it renders in-process through `render_to_string`, and `cargo run`
+always builds first.
 
 ### How to verify
 
 ```bash
-nix develop -c cargo build --release   # REQUIRED — see Next steps
-nix develop -c python3 test/golden.py
+nix develop -c cargo run --example golden
 
 # the corpus is self-verifying; check it without trusting the program:
 cd test/golden && sha512sum */*_background.svg | head
@@ -147,4 +149,4 @@ cd test/golden && sha512sum */*_background.svg | head
 
 - Commits: `7b8c8dc`
 - ADRs: [[0001]] the config space this enumerates · [[0003]] the port it proved ·
-  [[0009]] the refactor it proved
+  [[0009]] the refactor it proved · [[0013]] the harness rewritten in Rust

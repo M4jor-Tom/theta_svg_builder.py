@@ -113,8 +113,7 @@ None.
 ### How to verify
 
 ```bash
-nix develop -c cargo build --release
-nix develop -c python3 test/golden.py
+nix develop -c cargo run --example golden
 
 # trailing-byte state (xxd is unavailable in this environment; use od)
 tail -c 2 templates/root.svg | od -c      # must show \n \n

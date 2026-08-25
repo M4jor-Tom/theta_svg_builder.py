@@ -145,10 +145,9 @@ None. The decision is fully applied.
 ### How to verify
 
 ```bash
-nix develop -c cargo build --release
 nix develop -c cargo test
-nix develop -c python3 test/golden.py   # must report 42 byte-identical
-nix build                                # proves the Nix sandbox sees templates/
+nix develop -c cargo run --example golden  # must report 42 byte-identical
+nix build                                  # proves the Nix sandbox sees templates/
 ```
 
 ### Gotchas

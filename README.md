@@ -88,13 +88,13 @@ the icon).
 ## Run
 
 ```sh
-nix run .#bgsvg                       # the schema's defaults
+nix run .#bgsvg                           # the schema's defaults
 nix run .#bgsvg -- path/to/config.json
-nix run .#bgsvg -- --configs          # dump the 42-config corpus as JSON lines
-nix run .#bgsvg -- --descriptor       # parameters.proto as a FileDescriptorSet, for other languages
-nix build .#bgsvg-wasm                # the browser-callable module (web/ and nodejs/)
-nix develop -c cargo test --workspace # invariants
-nix develop -c python3 test/golden.py # the picture did not change
+nix run .#bgsvg -- --configs              # dump the 42-config corpus as JSON lines
+nix run .#bgsvg -- --descriptor           # parameters.proto as a FileDescriptorSet, for other languages
+nix build .#bgsvg-wasm                    # the browser-callable module (web/ and nodejs/)
+nix develop -c cargo test --workspace     # invariants
+nix develop -c cargo run --example golden # the picture did not change
 ```
 
 Without Nix: Rust 1.85+ (edition 2024) and `protoc` on `PATH`, then
@@ -157,8 +157,8 @@ an out-of-range matrix angle, a malformed colour, a malformed resolution,
 malformed JSON, and a missing config file.
 
 ```sh
-nix develop -c python3 test/golden.py            # verify
-nix develop -c python3 test/golden.py --regen    # rewrite after an intended visual change
+nix develop -c cargo run --example golden             # verify
+nix develop -c cargo run --example golden -- --regen  # rewrite after an intended visual change
 ```
 
 `cargo test --workspace` says the right code ran and the invariants hold; the golden
@@ -187,8 +187,9 @@ line diff says nothing about a one-line document. The corpus is 4.2 MB, about
 0.6 MB compressed.
 
 The goldens fix `seed` at `0` and carry no `output`, because geometry depends
-only on the seed and the sink picks a destination, not pixels; `test/golden.py`
-renders them at 1080p. A directory sink with several resolutions is one config
+only on the seed and the sink picks a destination, not pixels; the harness
+renders them at whatever the default sink picks, which is 1080p. A directory
+sink with several resolutions is one config
 with several SVGs, which this layout cannot name, so the corpus holds
 single-render configs only. Two configs in one directory would mean they render
 byte-identical SVGs — an axis that stopped changing the picture — and `scan()`

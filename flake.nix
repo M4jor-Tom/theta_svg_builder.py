@@ -25,6 +25,10 @@
               ./src
               ./templates
               ./tests
+              # examples/golden.rs reads the corpus at run time but is compiled
+              # by `cargo test`, so the source belongs here and the corpus does
+              # not -- editing a golden still cannot trigger a rebuild
+              ./examples
               ./crates/bgsvg-wasm/Cargo.toml
               ./crates/bgsvg-wasm/src
             ];
@@ -83,20 +87,20 @@
 
       devShells = forAll (pkgs: {
         default = pkgs.mkShell {
-          # python3 is here for test/golden.py and nothing else
           packages = [
             pkgs.cargo
             pkgs.rustc
             pkgs.rustfmt
             pkgs.clippy
             pkgs.protobuf
-            pkgs.python3
             # the wasm32-unknown-unknown linker -- nixpkgs' rustc carries the
             # target's std but not a bundled rust-lld
             pkgs.lld
             pkgs.wasm-bindgen-cli
-            # nodejs is here to run test/wasm.mjs and nothing else, the same way
-            # python3 is here only for test/golden.py
+            # nodejs is here to run test/wasm.mjs and nothing else. It is the
+            # last non-Rust runtime in this shell: wasm-bindgen's glue is
+            # JavaScript by construction, so driving the browser build from
+            # Rust would mean reimplementing that glue, not deleting it.
             pkgs.nodejs
           ];
           PROTOC = "${pkgs.protobuf}/bin/protoc";

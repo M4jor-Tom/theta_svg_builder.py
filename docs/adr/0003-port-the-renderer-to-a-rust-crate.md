@@ -82,7 +82,8 @@ enum keep the dependency list at what the schema actually requires.
 
 Rejected: the corpus is the equivalence proof, and keeping both would mean
 keeping the generated `_pb2` module the port exists to remove. Python stays in
-the dev shell only to run `test/golden.py`.
+the dev shell only to run `test/golden.py`. (That last use was removed by
+[[0013]]; the dev shell no longer carries a Python.)
 
 ## Consequences
 
@@ -136,7 +137,7 @@ None.
 
 ```bash
 nix develop -c cargo test
-nix develop -c cargo build --release && nix develop -c python3 test/golden.py
+nix develop -c cargo run --example golden
 nix build
 ```
 

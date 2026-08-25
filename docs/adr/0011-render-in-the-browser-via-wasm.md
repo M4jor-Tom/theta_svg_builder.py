@@ -148,7 +148,7 @@ repository and is out of scope for this one.
 
 ```bash
 nix develop -c cargo test --workspace  # invariants, including bgsvg-wasm
-nix develop -c python3 test/golden.py  # the picture did not change
+nix develop -c cargo run --example golden  # the picture did not change
 nix build .#bgsvg-wasm --no-link --print-out-paths   # then, against that path:
 BGSVG_WASM=<out-path>/nodejs nix develop -c node test/wasm.mjs   # WASM == native, all 42 configs
 ```

@@ -7,17 +7,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```sh
-nix run .#bgsvg                       # renders the schema's defaults
+nix run .#bgsvg                           # renders the schema's defaults
 nix run .#bgsvg -- path/to/config.json
-nix build .#bgsvg-wasm                # the browser module; web/ for bundlers, nodejs/ for test/wasm.mjs
-nix develop -c cargo test --workspace # invariants — run after ANY change
-nix develop -c python3 test/golden.py # the picture did not change (--regen when it should have)
+nix build .#bgsvg-wasm                    # the browser module; web/ for bundlers, nodejs/ for test/wasm.mjs
+nix develop -c cargo test --workspace     # invariants — run after ANY change
+nix develop -c cargo run --example golden # the picture did not change (append `-- --regen` when it should have)
 BGSVG_WASM=$PWD/result/nodejs nix develop -c node test/wasm.mjs   # the wasm build renders the same bytes
-nix build                             # default package = bgsvg; runs cargo test
+nix build                                 # default package = bgsvg; runs cargo test
 ```
 Without Nix: Rust 1.85+ and `protoc` on `PATH`.
 
-Three tests, and a change is unfinished until all three pass. `cargo test --workspace` builds all 42 valid `background.motion` × `background.image` × `icon` × `overlay` combinations and asserts the invariants below (`#[test]` functions across `src/` and `tests/`) — it says a render is *well-formed*. `test/golden.py` says it is *unchanged*: the same 42 configs live in `test/golden/<sha512 of the SVG>/`, each beside the `<sha512 of the SVG>_background.svg` it renders. One rule covers both files — each is named by the sha512 of its own bytes, exactly as written — so `sha512sum` reproduces every name unaided. The SVG is kept, not just its hash, so a failure reports the first differing byte instead of only a moved hash. `tests/configs.rs` and `test/golden.py` both enumerate from `bgsvg --configs`, which is `params::valid_configs`, rather than each carrying its own loop, so a new axis cannot reach one surface and miss the other — add an enum value and both sweeps grow. It fails on any byte that moves, so run `--regen` when the picture was **meant** to move, and read the diff first — a golden change you did not intend is the regression. `test/wasm.mjs` says the wasm build lands on those same 42 sha512s: it renders the same corpus through the browser-callable `render()` and compares bytes, because a wasm build that renders nearly the same picture would still pass the other two tests.
+Three tests, and a change is unfinished until all three pass. `cargo test --workspace` builds all 42 valid `background.motion` × `background.image` × `icon` × `overlay` combinations and asserts the invariants below (`#[test]` functions across `src/` and `tests/`) — it says a render is *well-formed*. `examples/golden.rs` says it is *unchanged*: the same 42 configs live in `test/golden/<sha512 of the SVG>/`, each beside the `<sha512 of the SVG>_background.svg` it renders. One rule covers both files — each is named by the sha512 of its own bytes, exactly as written — so `sha512sum` reproduces every name unaided. The SVG is kept, not just its hash, so a failure reports the first differing byte instead of only a moved hash. `tests/configs.rs` and `examples/golden.rs` both enumerate from `params::valid_configs`, rather than each carrying its own loop, so a new axis cannot reach one surface and miss the other — add an enum value and both sweeps grow. The golden harness is an example rather than a `#[test]` so that `--regen` stays a flag and the corpus stays out of the flake's source fileset; `cargo test` still compiles it, so it cannot rot. It fails on any byte that moves, so run `--regen` when the picture was **meant** to move, and read the diff first — a golden change you did not intend is the regression. `test/wasm.mjs` says the wasm build lands on those same 42 sha512s: it renders the same corpus through the browser-callable `render()` and compares bytes, because a wasm build that renders nearly the same picture would still pass the other two tests.
 
 ## Architecture
 

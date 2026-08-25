@@ -1,5 +1,5 @@
 //! Every config the schema expresses and validate() keeps, rendered small and
-//! checked for the dispatch invariants. `test/golden.py` covers well-formedness
+//! checked for the dispatch invariants. `examples/golden.rs` covers well-formedness
 //! and byte-stability; this covers "the right code ran".
 use bgsvg::params::{Glyph, parse, resolve, valid_configs, validate};
 use bgsvg::svg::build_svg;

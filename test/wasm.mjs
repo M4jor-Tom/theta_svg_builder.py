@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
 const GOLDEN = join(REPO, "test", "golden");
-const SIZE = [1920, 1080]; // what test/golden.py renders at
+const SIZE = [1920, 1080]; // what examples/golden.rs renders at
 const JSON_SUFFIX = "_parameters.json";
 const SVG_SUFFIX = "_background.svg";
 const EXPECTED = 42; // same count tests/configs.rs asserts
@@ -53,7 +53,7 @@ for (const dir of readdirSync(GOLDEN).sort()) {
   const cfgName = names.find((n) => n.endsWith(JSON_SUFFIX));
   const svgName = names.find((n) => n.endsWith(SVG_SUFFIX));
   if (!cfgName || !svgName) {
-    bad.push(`${dir.slice(0, 16)}...: not a golden directory; run test/golden.py first`);
+    bad.push(`${dir.slice(0, 16)}...: not a golden directory; run cargo run --example golden first`);
     continue;
   }
 

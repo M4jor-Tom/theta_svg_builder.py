@@ -107,23 +107,23 @@ is empty.
 
 | File | Role |
 |------|------|
-| `test/golden.py` | the harness; `--regen` rewrites the corpus |
+| `examples/golden.rs` | the harness; `--regen` rewrites the corpus |
 | `test/golden/` | 42 directories, each named by the sha512 of its own SVG |
 | `tests/configs.rs` | enumerates the same 42 configs from `params::valid_configs` |
 
+The harness was `test/golden.py` when this refactor was proved; [[0013]] later
+ported it to Rust, again without touching a golden.
+
 ### Next steps
 
-One recommended follow-up, **not** done here: `test/golden.py` does not build the
-binary — it uses whatever sits in `target/release/`, and `CLAUDE.md` documents
-running it with no build step. A stale binary produces the old bytes and prints
-`golden ok`, making the check a silent no-op. Add the build step to `CLAUDE.md`
-(or to the script).
+The follow-up this ADR recommended — the harness rendered through whatever binary
+sat in `target/release/`, so a stale one could make the check a silent no-op — is
+done in [[0013]]. The harness now renders in-process and `cargo run` builds first.
 
 ### How to verify
 
 ```bash
-nix develop -c cargo build --release   # REQUIRED — golden.py does not build
-nix develop -c python3 test/golden.py
+nix develop -c cargo run --example golden
 ```
 
 To confirm the harness is live rather than vacuous, perturb one byte in a
@@ -134,14 +134,12 @@ This was done and it behaves correctly.
 
 - **`--regen` is almost never the right answer.** If the goldens move, the default
   assumption is a regression, not an intended visual change. Read the diff first.
-- Running `golden.py` without building first can report success against a
-  months-old binary. Always build.
-- `nix develop -c cargo test` builds *debug*; `nix build` builds in a sandbox and
-  writes to `./result`. Neither refreshes `target/release/bgsvg`.
+- The stale-binary trap this section used to warn about is gone since [[0013]]:
+  `cargo run --example golden` rebuilds whatever it renders with.
 
 ### Related
 
 - Commits: `5a7e96a..10e6c23` (the whole refactor, corpus untouched throughout)
 - ADRs: [[0002]] the corpus this relies on, and why it is self-naming ·
   [[0005]] engine choice · [[0007]] the rule byte-exactness helped enforce ·
-  [[0010]] the formatting cost it imposed
+  [[0010]] the formatting cost it imposed · [[0013]] the harness rewritten in Rust
