@@ -20,6 +20,6 @@ pbjson-build = "0.9"
 prost-build = "0.14"
 
 [dev-dependencies]
-# examples/golden.rs only: "well-formed", not merely "unchanged". Nothing in the
+# tests/golden.rs only: "well-formed", not merely "unchanged". Nothing in the
 # shipped binary parses XML -- this crate writes it and never reads it back.
 roxmltree = "0.20"

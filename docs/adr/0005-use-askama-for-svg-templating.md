@@ -146,7 +146,7 @@ None. The decision is fully applied.
 
 ```bash
 nix develop -c cargo test
-nix develop -c cargo run --example golden  # must report 42 byte-identical
+nix develop -c cargo test --test golden  # must report 42 byte-identical
 nix build                                  # proves the Nix sandbox sees templates/
 ```
 

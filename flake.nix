@@ -12,8 +12,10 @@
       packages = forAll (
         pkgs:
         let
-          # only what the build reads: the corpus and the docs stay out of the
-          # store path, so editing a golden cannot trigger a rebuild
+          # only what the build reads. `./tests` now carries the golden corpus,
+          # because `cargo test` verifies it and `nix build` runs `cargo test`
+          # in a sandbox -- so a golden edit does change this store path, and
+          # must: the check depends on those bytes. The docs stay out.
           src = pkgs.lib.fileset.toSource {
             root = ./.;
             fileset = pkgs.lib.fileset.unions [
@@ -25,10 +27,6 @@
               ./src
               ./templates
               ./tests
-              # examples/golden.rs reads the corpus at run time but is compiled
-              # by `cargo test`, so the source belongs here and the corpus does
-              # not -- editing a golden still cannot trigger a rebuild
-              ./examples
               ./crates/bgsvg-wasm/Cargo.toml
               ./crates/bgsvg-wasm/src
             ];
@@ -62,7 +60,7 @@
               cargo build --release --target wasm32-unknown-unknown -p bgsvg-wasm
             '';
             # two targets from one .wasm: `web` is what a bundler consumes,
-            # `nodejs` is what test/wasm.mjs runs. The glue differs; the
+            # `nodejs` is what tests/wasm.mjs runs. The glue differs; the
             # rendered bytes cannot.
             installPhase = ''
               for t in web nodejs; do
@@ -97,10 +95,11 @@
             # target's std but not a bundled rust-lld
             pkgs.lld
             pkgs.wasm-bindgen-cli
-            # nodejs is here to run test/wasm.mjs and nothing else. It is the
-            # last non-Rust runtime in this shell: wasm-bindgen's glue is
-            # JavaScript by construction, so driving the browser build from
-            # Rust would mean reimplementing that glue, not deleting it.
+            # nodejs is here to run tests/wasm.mjs and nothing else -- `cargo
+            # test` shells out to it through tests/wasm.rs. It is the last
+            # non-Rust runtime in this shell: wasm-bindgen's glue is JavaScript
+            # by construction, so driving the browser build from Rust would mean
+            # reimplementing that glue, not deleting it.
             pkgs.nodejs
           ];
           PROTOC = "${pkgs.protobuf}/bin/protoc";

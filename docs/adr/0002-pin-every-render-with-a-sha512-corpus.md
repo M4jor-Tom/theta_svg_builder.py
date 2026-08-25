@@ -22,8 +22,9 @@ byte-level oracle, a reimplementation can only be checked by looking at it.
 
 ## Decision
 
-We will keep `test/golden/<sha512 of the SVG>/`, each directory holding a
-config beside the SVG it renders.
+We will keep `tests/golden/<sha512 of the SVG>/`, each directory holding a
+config beside the SVG it renders. (The path was `test/golden/` when this was
+decided; [[0014]] moved it under `tests/`, contents untouched.)
 
 **One rule covers both files: each is named by the sha512 of its own bytes,
 exactly as written.** So `sha512sum` reproduces every name in the corpus
@@ -112,34 +113,36 @@ SVG template refactor without regeneration.
 
 | File | Role |
 |------|------|
-| `examples/golden.rs` | the harness; `--regen` rewrites the corpus |
-| `test/golden/` | 42 directories, each named by the sha512 of its own SVG |
+| `tests/golden.rs` | the harness; `regenerate_the_corpus` is the `#[ignore]`d test that rewrites it |
+| `tests/golden/` | 42 directories, each named by the sha512 of its own SVG |
 | `src/params.rs` | `valid_configs` — the single enumeration both sweeps read |
 | `tests/configs.rs` | the Rust sweep over the same 42 |
 
-The harness was `test/golden.py` until [[0013]] ported it to Rust; the corpus
-crossed that port unmodified, as it had the two before it.
+The harness was `test/golden.py` until [[0013]] ported it to Rust, and the corpus
+sat at `test/golden/` until [[0014]] moved it under `tests/` and made
+`cargo test` run it. It crossed both unmodified, as it had the two before them.
 
 ### Next steps
 
 The known gap this ADR recorded — **the harness did not build the binary**, so it
 could print `golden ok` against a stale `target/release/bgsvg` — is closed by
-[[0013]]: it renders in-process through `render_to_string`, and `cargo run`
-always builds first.
+[[0013]]: it renders in-process through `render_to_string`, and a test target is
+rebuilt with the code it tests.
 
 ### How to verify
 
 ```bash
-nix develop -c cargo run --example golden
+nix develop -c cargo test --test golden
 
 # the corpus is self-verifying; check it without trusting the program:
-cd test/golden && sha512sum */*_background.svg | head
+cd tests/golden && sha512sum */*_background.svg | head
 ```
 
 ### Gotchas
 
-- **`--regen` is almost never right.** A moved golden means a regression until
-  proven otherwise. Read the diff first.
+- **Regenerating is almost never right.** A moved golden means a regression until
+  proven otherwise. Read the diff first. Since [[0014]] the rewrite is an
+  `#[ignore]`d test you have to name, which is the point.
 - The JSON side of each pair is byte-sensitive too: it is
   `json.dumps(sort_keys=True, separators=(",", ":"))`, which `serde_json`'s
   compact output over its `BTreeMap`-backed map matches exactly. That match is
@@ -149,4 +152,5 @@ cd test/golden && sha512sum */*_background.svg | head
 
 - Commits: `7b8c8dc`
 - ADRs: [[0001]] the config space this enumerates · [[0003]] the port it proved ·
-  [[0009]] the refactor it proved · [[0013]] the harness rewritten in Rust
+  [[0009]] the refactor it proved · [[0013]] the harness rewritten in Rust ·
+  [[0014]] the corpus moved under `tests/` and run by `cargo test`

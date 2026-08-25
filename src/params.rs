@@ -223,7 +223,7 @@ pub fn parse_res(s: &str) -> Result<(u32, u32), Error> {
 /// joins the sweep without editing this function.
 ///
 /// Both test surfaces enumerate from here -- `tests/configs.rs` to assert a
-/// render is well-formed, `examples/golden.rs` to assert it did not change -- so a
+/// render is well-formed, `tests/golden.rs` to assert it did not change -- so a
 /// new axis cannot reach one and miss the other. The matrix angle and colour
 /// are deliberately non-default: angle 0 skips the rotation and the default
 /// colour skips the override, so pinning those two would pin nothing.

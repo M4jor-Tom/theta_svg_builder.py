@@ -93,8 +93,7 @@ nix run .#bgsvg -- path/to/config.json
 nix run .#bgsvg -- --configs              # dump the 42-config corpus as JSON lines
 nix run .#bgsvg -- --descriptor           # parameters.proto as a FileDescriptorSet, for other languages
 nix build .#bgsvg-wasm                    # the browser-callable module (web/ and nodejs/)
-nix develop -c cargo test --workspace     # invariants
-nix develop -c cargo run --example golden # the picture did not change
+nix develop -c cargo test --workspace     # every check
 ```
 
 Without Nix: Rust 1.85+ (edition 2024) and `protoc` on `PATH`, then
@@ -140,8 +139,19 @@ writing four sizes to a single file is not expressible. `CLOSEOPEN` with
 
 ## Check
 
+One command runs every check; everything lives under `tests/`.
+
 ```sh
-nix develop -c cargo test --workspace
+nix build .#bgsvg-wasm
+BGSVG_WASM=$PWD/result/nodejs nix develop -c cargo test --workspace
+```
+
+`BGSVG_WASM` is what turns the wasm sweep on. Without it that one test prints
+`SKIPPED` and passes — the module comes from a separate derivation, so the
+alternative would be failing every plain `cargo test` — and the rest still runs:
+
+```sh
+nix develop -c cargo test --workspace   # everything except the wasm sweep
 ```
 
 Builds all 42 valid `background.motion` × `background.image` × `icon` ×
@@ -156,19 +166,14 @@ sinks at once, a typo'd key, `background.motion CLOSEOPEN` without an image,
 an out-of-range matrix angle, a malformed colour, a malformed resolution,
 malformed JSON, and a missing config file.
 
-```sh
-nix develop -c cargo run --example golden             # verify
-nix develop -c cargo run --example golden -- --regen  # rewrite after an intended visual change
-```
-
-`cargo test --workspace` says the right code ran and the invariants hold; the golden
-corpus says the picture is unchanged and well-formed; and `test/wasm.mjs` (below)
-says the wasm build lands on those same bytes. `test/golden/` holds those same 42
+`tests/configs.rs` says the right code ran and the invariants hold; `tests/golden.rs`
+says the picture is unchanged and well-formed; and `tests/wasm.rs` (below) says the
+wasm build lands on those same bytes. `tests/golden/` holds those same 42
 configs, each kept beside the SVG it renders:
 
 ```
-test/golden/<sha512 of the SVG>/<sha512 of the JSON>_parameters.json
-                               /<sha512 of the SVG>_background.svg
+tests/golden/<sha512 of the SVG>/<sha512 of the JSON>_parameters.json
+                                /<sha512 of the SVG>_background.svg
 ```
 
 One rule covers both files: each is named by the sha512 of its own bytes,
@@ -176,15 +181,22 @@ exactly as written. So `sha512sum` reproduces every name in the corpus, and
 nothing has to trust this program to check its own work:
 
 ```sh
-sha512sum test/golden/<D>/*                             # -> <F>, <D>
-nix run .#bgsvg -- test/golden/<D>/<F>_parameters.json
-sha512sum out/trihex-*.svg                              # -> D
+sha512sum tests/golden/<D>/*                              # -> <F>, <D>
+nix run .#bgsvg -- tests/golden/<D>/<F>_parameters.json
+sha512sum out/trihex-*.svg                               # -> D
 ```
 
 Keeping the SVG rather than only its hash is what lets a failure say *what*
 moved — it reports the first differing byte with the text either side, since a
 line diff says nothing about a one-line document. The corpus is 4.2 MB, about
 0.6 MB compressed.
+
+A moved golden is a regression until proven otherwise, so rewriting the corpus
+is an `#[ignore]`d test you have to ask for by name:
+
+```sh
+nix develop -c cargo test --test golden -- --ignored regenerate_the_corpus
+```
 
 The goldens fix `seed` at `0` and carry no `output`, because geometry depends
 only on the seed and the sink picks a destination, not pixels; the harness
@@ -195,11 +207,13 @@ single-render configs only. Two configs in one directory would mean they render
 byte-identical SVGs — an axis that stopped changing the picture — and `scan()`
 reports it.
 
-`test/wasm.mjs` sweeps the same corpus through the browser-callable build and
+`tests/wasm.mjs` sweeps the same corpus through the browser-callable build and
 compares bytes, so a wasm build that renders nearly the same picture still
-fails:
+fails. `tests/wasm.rs` is what `cargo test` runs it from; the sweep stays
+JavaScript because `wasm-bindgen`'s glue is JavaScript, and it is the only
+non-Rust code in the tree. Run it on its own with:
 
 ```sh
 nix build .#bgsvg-wasm
-BGSVG_WASM=$PWD/result/nodejs nix develop -c node test/wasm.mjs   # the wasm build renders the same bytes
+BGSVG_WASM=$PWD/result/nodejs nix develop -c node tests/wasm.mjs
 ```

@@ -128,7 +128,7 @@ currently only in dated design docs and this ADR.
 # No template composes another; composition is Rust-side only.
 grep -rn 'render()' src/          # 6 call sites, all in .rs
 grep -c '{% include' templates/*.svg   # expect 0 everywhere
-nix develop -c cargo run --example golden
+nix develop -c cargo test --test golden
 ```
 
 ### Gotchas

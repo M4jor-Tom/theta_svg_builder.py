@@ -3,10 +3,18 @@
 | Field    | Value                          |
 |----------|--------------------------------|
 | Date     | 2026-08-25                     |
-| Status   | Accepted                       |
+| Status   | Accepted; the example/`#[test]` half superseded by [[0014]] |
 | Deciders | theta                          |
 | Branch   | `master`                       |
-| Commit   | pending                        |
+| Commit   | `40ef3a8`                      |
+
+> **Superseded in part.** Dropping Python stands and is not revisited. The
+> packaging choice below — an example rather than a `#[test]`, `test/golden/`
+> kept out of the flake fileset — was reversed by [[0014]] within the day:
+> `cargo test` now runs the corpus and the fixtures live under `tests/`. The
+> "`tests/golden.rs`, a real `#[test]`" alternative below is what shipped, and
+> the cost it names was accepted rather than avoided. Read this for the port;
+> read [[0014]] for where the harness is now.
 
 ## Context
 
@@ -131,36 +139,29 @@ script; deleting Node would mean rewriting what the check actually tests.
 
 ### Current state
 
-Complete. `nix develop -c cargo run --example golden` reports 42 byte-identical
-SVGs against the corpus exactly as committed; `git status -- test/golden` is
-empty across the whole change.
+The Python is gone and stays gone. The packaging half is superseded — see
+[[0014]] for where the harness lives, how it is run, and how it is regenerated.
+`examples/` no longer exists.
 
 ### Key files / entry points
 
 | File | Role |
 |------|------|
-| `examples/golden.rs` | the harness; `-- --regen` rewrites the corpus |
-| `test/golden/` | 42 directories, unchanged since [[0002]] created them |
+| `tests/golden.rs` | the harness — an example at this ADR's commit, a `#[test]` since [[0014]] |
+| `tests/golden/` | 42 directories, unchanged since [[0002]] created them; at `test/golden/` until [[0014]] |
 | `src/params.rs` | `valid_configs` and `parse_res` — the two things the harness reads instead of restating |
-| `flake.nix` | `./examples` is in the fileset; `test/golden` deliberately is not |
 | `Cargo.toml` | `[dev-dependencies] roxmltree` — the only XML parser in the tree |
 
 ### Next steps
 
-None.
+None here. The packaging follow-up is [[0014]].
 
 ### How to verify
 
 ```bash
 nix develop -c cargo test --workspace
-nix develop -c cargo run --example golden
 nix build .#bgsvg-wasm --no-link --print-out-paths   # then, against that path:
-BGSVG_WASM=<out-path>/nodejs nix develop -c node test/wasm.mjs
-
-# the harness must be live, not vacuous: perturb a golden and watch it fail
-printf x >> test/golden/<D>/<D>_background.svg
-nix develop -c cargo run --example golden    # 2 problems, naming the byte
-git checkout -- test/golden
+BGSVG_WASM=<out-path>/nodejs nix develop -c cargo test --workspace
 ```
 
 There must be no Python left in the toolchain:
@@ -175,19 +176,19 @@ behaviour. They are not a dependency on a Python being installed.
 
 ### Gotchas
 
-- **`--regen` is still almost never right.** [[0009]] is the standing rule and
-  this port did not soften it; the flag simply moved from
-  `python3 test/golden.py --regen` to `cargo run --example golden -- --regen`.
-  Note the bare `--`: without it cargo eats the flag.
-- Adding a golden test to `tests/` instead would silently pull `test/golden/`
-  into the flake fileset, or fail in the `nix build` sandbox for want of it.
-  Both are the failure this ADR chose an example to avoid.
-- `roxmltree` earns its keep at `--regen` time, where a malformed template would
-  otherwise be pinned into the corpus. On a verify run the bytes already have to
-  match, so the parse is close to redundant — do not delete it on that reasoning.
+- **Regenerating is still almost never right.** [[0009]] is the standing rule and
+  neither this port nor [[0014]] softened it; only the incantation changed.
+- The flake-fileset cost this ADR avoided is real and was simply paid instead —
+  [[0014]] argues why. Do not "fix" it by moving the corpus back out.
+- `roxmltree` earns its keep at regeneration time, where a malformed template
+  would otherwise be pinned into the corpus. On a verify run the bytes already
+  have to match, so the parse is close to redundant — do not delete it on that
+  reasoning.
 
 ### Related
 
-- ADRs: [[0002]] the corpus and the gap this closes · [[0003]] the port that
-  left the last Python file · [[0009]] the standing rule against regenerating ·
-  [[0012]] the six-dependency claim a dev-dependency does not touch
+- Commits: `40ef3a8`
+- ADRs: [[0014]] supersedes the packaging half · [[0002]] the corpus and the gap
+  this closes · [[0003]] the port that left the last Python file · [[0009]] the
+  standing rule against regenerating · [[0012]] the six-dependency claim a
+  dev-dependency does not touch

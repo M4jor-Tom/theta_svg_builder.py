@@ -113,7 +113,7 @@ None.
 ### How to verify
 
 ```bash
-nix develop -c cargo run --example golden
+nix develop -c cargo test --test golden
 
 # trailing-byte state (xxd is unavailable in this environment; use od)
 tail -c 2 templates/root.svg | od -c      # must show \n \n

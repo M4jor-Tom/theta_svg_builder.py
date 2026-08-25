@@ -122,7 +122,7 @@ None.
 
 ```bash
 nix develop -c cargo test rng               # the captured Python vectors
-nix develop -c cargo run --example golden   # 42 byte-identical
+nix develop -c cargo test --test golden   # 42 byte-identical
 ```
 
 ### Gotchas

@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 // The WASM build must render the SAME BYTES as the native one -- not merely the
-// same picture. Every render in test/golden/ is pinned to the sha512 of its own
+// same picture. Every render in tests/golden/ is pinned to the sha512 of its own
 // bytes, so comparing against the corpus proves both at once: the wasm build
 // matches native, and it matches what native was pinned to.
 //
 // Float formatting through geom::fmt is the plausible way two targets diverge
 // while both still look correct, which is why this exists at all.
 //
+// `tests/wasm.rs` runs this, so `cargo test --workspace` covers it; run it
+// directly when you want the sweep without the harness around it:
+//
 //   nix build .#bgsvg-wasm
-//   BGSVG_WASM=$PWD/result/nodejs nix develop -c node test/wasm.mjs
+//   BGSVG_WASM=$PWD/result/nodejs nix develop -c node tests/wasm.mjs
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
@@ -16,8 +19,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
-const GOLDEN = join(REPO, "test", "golden");
-const SIZE = [1920, 1080]; // what examples/golden.rs renders at
+const GOLDEN = join(REPO, "tests", "golden");
+const SIZE = [1920, 1080]; // what tests/golden.rs renders at
 const JSON_SUFFIX = "_parameters.json";
 const SVG_SUFFIX = "_background.svg";
 const EXPECTED = 42; // same count tests/configs.rs asserts
@@ -25,7 +28,7 @@ const EXPECTED = 42; // same count tests/configs.rs asserts
 const pkg = process.env.BGSVG_WASM;
 if (!pkg) {
   console.error("set BGSVG_WASM to a wasm-bindgen --target nodejs output directory");
-  console.error("  nix build .#bgsvg-wasm && BGSVG_WASM=$PWD/result/nodejs node test/wasm.mjs");
+  console.error("  nix build .#bgsvg-wasm && BGSVG_WASM=$PWD/result/nodejs node tests/wasm.mjs");
   process.exit(2);
 }
 const { render, resolve_resolution, resolutions } = await import(join(pkg, "bgsvg_wasm.js"));
@@ -53,7 +56,7 @@ for (const dir of readdirSync(GOLDEN).sort()) {
   const cfgName = names.find((n) => n.endsWith(JSON_SUFFIX));
   const svgName = names.find((n) => n.endsWith(SVG_SUFFIX));
   if (!cfgName || !svgName) {
-    bad.push(`${dir.slice(0, 16)}...: not a golden directory; run cargo run --example golden first`);
+    bad.push(`${dir.slice(0, 16)}...: not a golden directory; run cargo test --test golden first`);
     continue;
   }
 

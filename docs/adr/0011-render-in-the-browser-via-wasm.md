@@ -64,7 +64,7 @@ render — and a Node or Bun host adds the fattest baseline RSS of the three.
 
 Rejected without much deliberation: it would require reimplementing CPython's
 MT19937 a second time, and the corpus pins every draw. This is the one option
-that could not be proven correct against `test/golden/`.
+that could not be proven correct against `tests/golden/`.
 
 ### An honest note on why this was *not* decided on resource grounds
 
@@ -98,7 +98,7 @@ main document, and revoke each blob URL.
   optimisation.
 - `packages.bgsvg-wasm` emits **two** subdirectories from one `.wasm`: `web/`
   for a bundler consumer and `nodejs/` for the byte-identity sweep in
-  `test/wasm.mjs`. Only the `wasm-bindgen` JavaScript glue differs between
+  `tests/wasm.mjs`. Only the `wasm-bindgen` JavaScript glue differs between
   them — the `.wasm` is one build, so rendered bytes cannot differ between the
   two.
 - A panic traps the module and poisons every later call, so `bgsvg-wasm` carries
@@ -126,7 +126,7 @@ main document, and revoke each blob URL.
 
 ### Current state
 
-Complete. All 42 goldens passed unmodified throughout, and `test/wasm.mjs`
+Complete. All 42 goldens passed unmodified throughout, and `tests/wasm.mjs`
 reports the WASM build renders byte-identical documents at 1920×1080.
 
 ### Key files / entry points
@@ -148,9 +148,9 @@ repository and is out of scope for this one.
 
 ```bash
 nix develop -c cargo test --workspace  # invariants, including bgsvg-wasm
-nix develop -c cargo run --example golden  # the picture did not change
+nix develop -c cargo test --test golden  # the picture did not change
 nix build .#bgsvg-wasm --no-link --print-out-paths   # then, against that path:
-BGSVG_WASM=<out-path>/nodejs nix develop -c node test/wasm.mjs   # WASM == native, all 42 configs
+BGSVG_WASM=<out-path>/nodejs nix develop -c node tests/wasm.mjs   # WASM == native, all 42 configs
 ```
 
 ### Gotchas

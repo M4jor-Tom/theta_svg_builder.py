@@ -7,17 +7,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```sh
-nix run .#bgsvg                           # renders the schema's defaults
+nix run .#bgsvg                        # renders the schema's defaults
 nix run .#bgsvg -- path/to/config.json
-nix build .#bgsvg-wasm                    # the browser module; web/ for bundlers, nodejs/ for test/wasm.mjs
-nix develop -c cargo test --workspace     # invariants — run after ANY change
-nix develop -c cargo run --example golden # the picture did not change (append `-- --regen` when it should have)
-BGSVG_WASM=$PWD/result/nodejs nix develop -c node test/wasm.mjs   # the wasm build renders the same bytes
-nix build                                 # default package = bgsvg; runs cargo test
+nix build .#bgsvg-wasm                 # the browser module; web/ for bundlers, nodejs/ for tests/wasm.mjs
+BGSVG_WASM=$PWD/result/nodejs nix develop -c cargo test --workspace   # EVERY check — run after ANY change
+nix develop -c cargo test --workspace  # same, minus the wasm sweep, which skips loudly without BGSVG_WASM
+nix develop -c cargo test --test golden -- --ignored regenerate_the_corpus   # ONLY after an intended visual change
+nix build                              # default package = bgsvg; runs cargo test
 ```
 Without Nix: Rust 1.85+ and `protoc` on `PATH`.
 
-Three tests, and a change is unfinished until all three pass. `cargo test --workspace` builds all 42 valid `background.motion` × `background.image` × `icon` × `overlay` combinations and asserts the invariants below (`#[test]` functions across `src/` and `tests/`) — it says a render is *well-formed*. `examples/golden.rs` says it is *unchanged*: the same 42 configs live in `test/golden/<sha512 of the SVG>/`, each beside the `<sha512 of the SVG>_background.svg` it renders. One rule covers both files — each is named by the sha512 of its own bytes, exactly as written — so `sha512sum` reproduces every name unaided. The SVG is kept, not just its hash, so a failure reports the first differing byte instead of only a moved hash. `tests/configs.rs` and `examples/golden.rs` both enumerate from `params::valid_configs`, rather than each carrying its own loop, so a new axis cannot reach one surface and miss the other — add an enum value and both sweeps grow. The golden harness is an example rather than a `#[test]` so that `--regen` stays a flag and the corpus stays out of the flake's source fileset; `cargo test` still compiles it, so it cannot rot. It fails on any byte that moves, so run `--regen` when the picture was **meant** to move, and read the diff first — a golden change you did not intend is the regression. `test/wasm.mjs` says the wasm build lands on those same 42 sha512s: it renders the same corpus through the browser-callable `render()` and compares bytes, because a wasm build that renders nearly the same picture would still pass the other two tests.
+**`cargo test --workspace` is the whole check** — one command, three questions, and a change is unfinished until it passes. Everything lives under `tests/`; there is no second runner and no other language.
+
+*Is the render well-formed?* `tests/configs.rs` builds all 42 valid `background.motion` × `background.image` × `icon` × `overlay` combinations and asserts the invariants below, alongside the `#[test]` functions in `src/`.
+
+*Is it unchanged?* `tests/golden.rs` re-renders those same 42 and compares bytes against `tests/golden/<sha512 of the SVG>/`, each config kept beside the `<sha512 of the SVG>_background.svg` it renders. One rule covers both files — each is named by the sha512 of its own bytes, exactly as written — so `sha512sum` reproduces every name unaided. The SVG is kept, not just its hash, so a failure reports the first differing byte instead of only a moved hash. `tests/configs.rs` and `tests/golden.rs` both enumerate from `params::valid_configs` rather than each carrying its own loop, so a new axis cannot reach one surface and miss the other — add an enum value and both sweeps grow. It fails on any byte that moves, so `regenerate_the_corpus` is `#[ignore]`d and must be asked for by name; read the diff first — a golden change you did not intend is the regression.
+
+*Does the browser build agree?* `tests/wasm.rs` runs `tests/wasm.mjs`, which renders the same corpus through the browser-callable `render()` and compares bytes, because a wasm build that renders nearly the same picture would still pass the other two. The module comes from a separate derivation, so **without `BGSVG_WASM` that test prints `SKIPPED` and passes** — build `.#bgsvg-wasm` and set it before trusting a green run. The sweep stays JavaScript because `wasm-bindgen`'s glue is JavaScript; it is the only non-Rust code left in the tree.
 
 ## Architecture
 

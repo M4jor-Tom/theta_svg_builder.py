@@ -10,7 +10,7 @@
 
 ## Context
 
-`test/golden/` holds 42 directories, each named by the sha512 of the SVG it
+`tests/golden/` holds 42 directories, each named by the sha512 of the SVG it
 contains, covering every valid `background.motion` × `background.image` × `icon`
 × `overlay` combination. `test/golden.py` re-renders and compares bytes; a single
 moved byte fails it.
@@ -107,23 +107,24 @@ is empty.
 
 | File | Role |
 |------|------|
-| `examples/golden.rs` | the harness; `--regen` rewrites the corpus |
-| `test/golden/` | 42 directories, each named by the sha512 of its own SVG |
+| `tests/golden.rs` | the harness; `regenerate_the_corpus` is the `#[ignore]`d test that rewrites it |
+| `tests/golden/` | 42 directories, each named by the sha512 of its own SVG |
 | `tests/configs.rs` | enumerates the same 42 configs from `params::valid_configs` |
 
-The harness was `test/golden.py` when this refactor was proved; [[0013]] later
-ported it to Rust, again without touching a golden.
+The harness was `test/golden.py` when this refactor was proved; [[0013]] ported it
+to Rust and [[0014]] moved it into `cargo test`, again without touching a golden.
 
 ### Next steps
 
 The follow-up this ADR recommended — the harness rendered through whatever binary
 sat in `target/release/`, so a stale one could make the check a silent no-op — is
-done in [[0013]]. The harness now renders in-process and `cargo run` builds first.
+done in [[0013]]. The harness renders in-process, and since [[0014]] it is a test
+target, so it is rebuilt with the code it tests.
 
 ### How to verify
 
 ```bash
-nix develop -c cargo run --example golden
+nix develop -c cargo test --test golden
 ```
 
 To confirm the harness is live rather than vacuous, perturb one byte in a
@@ -132,14 +133,17 @@ This was done and it behaves correctly.
 
 ### Gotchas
 
-- **`--regen` is almost never the right answer.** If the goldens move, the default
-  assumption is a regression, not an intended visual change. Read the diff first.
+- **Regenerating is almost never the right answer.** If the goldens move, the
+  default assumption is a regression, not an intended visual change. Read the
+  diff first. [[0014]] made the rewrite an `#[ignore]`d test precisely so it
+  cannot ride along with a routine `cargo test`.
 - The stale-binary trap this section used to warn about is gone since [[0013]]:
-  `cargo run --example golden` rebuilds whatever it renders with.
+  `cargo test --test golden` rebuilds whatever it renders with.
 
 ### Related
 
 - Commits: `5a7e96a..10e6c23` (the whole refactor, corpus untouched throughout)
 - ADRs: [[0002]] the corpus this relies on, and why it is self-naming ·
   [[0005]] engine choice · [[0007]] the rule byte-exactness helped enforce ·
-  [[0010]] the formatting cost it imposed · [[0013]] the harness rewritten in Rust
+  [[0010]] the formatting cost it imposed · [[0013]] the harness rewritten in Rust ·
+  [[0014]] regeneration made an `#[ignore]`d test

@@ -137,7 +137,7 @@ None.
 
 ```bash
 nix develop -c cargo test
-nix develop -c cargo run --example golden
+nix develop -c cargo test --test golden
 nix build
 ```
 
